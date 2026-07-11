@@ -36,6 +36,10 @@ type RunState =
   | { phase: "error"; message: string; results: WorkerTestResult[]; stdout?: string };
 
 const STORAGE_KEY = "leetcode-hot100-study-notebook-v1";
+const FONT_SIZE_KEY = "leetcode-hot100-font-size-v1";
+const MIN_FONT_SIZE = 16;
+const MAX_FONT_SIZE = 24;
+const DEFAULT_FONT_SIZE = 18;
 
 const statusLabels: Record<LearningStatus, string> = {
   todo: "未开始",
@@ -109,6 +113,7 @@ export default function Home() {
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
   const [hydrated, setHydrated] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -120,6 +125,7 @@ export default function Home() {
   );
   const currentRecord = mergeRecord(currentProblem, records[currentProblem.id]);
   const codeLines = currentRecord.code.split("\n");
+  const fontScale = Math.round((fontSize / MIN_FONT_SIZE) * 100);
 
   const topics = useMemo(
     () => ["全部题型", ...Array.from(new Set(problems.map((problem) => problem.topic)))],
@@ -154,6 +160,10 @@ export default function Home() {
             setSelectedId(parsed.selectedId);
           }
         }
+        const savedFontSize = Number(window.localStorage.getItem(FONT_SIZE_KEY));
+        if (Number.isInteger(savedFontSize) && savedFontSize >= MIN_FONT_SIZE && savedFontSize <= MAX_FONT_SIZE) {
+          setFontSize(savedFontSize);
+        }
       } catch {
         // A damaged local note should not stop the site from opening.
       } finally {
@@ -170,6 +180,12 @@ export default function Home() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [hydrated, records, selectedId]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
+    if (!hydrated) return;
+    window.localStorage.setItem(FONT_SIZE_KEY, String(fontSize));
+  }, [fontSize, hydrated]);
 
   useEffect(() => {
     return () => {
@@ -330,6 +346,36 @@ export default function Home() {
 
         <div className="header-actions">
           <span className="save-state"><i />笔记自动保存在本机</span>
+          <div className="font-size-control" aria-label="字体大小调节">
+            <span>字号</span>
+            <button
+              type="button"
+              aria-label="减小字体"
+              onClick={() => setFontSize((current) => Math.max(MIN_FONT_SIZE, current - 1))}
+              disabled={fontSize === MIN_FONT_SIZE}
+            >
+              A−
+            </button>
+            <input
+              type="range"
+              min={MIN_FONT_SIZE}
+              max={MAX_FONT_SIZE}
+              step="1"
+              value={fontSize}
+              onChange={(event) => setFontSize(Number(event.target.value))}
+              aria-label="调整字体大小"
+              aria-valuetext={`${fontScale}%`}
+            />
+            <button
+              type="button"
+              aria-label="增大字体"
+              onClick={() => setFontSize((current) => Math.min(MAX_FONT_SIZE, current + 1))}
+              disabled={fontSize === MAX_FONT_SIZE}
+            >
+              A+
+            </button>
+            <output aria-live="polite">{fontScale}%</output>
+          </div>
           <button className="button button-quiet" type="button" onClick={() => setShowGuide(true)}>新手怎么用</button>
         </div>
       </header>

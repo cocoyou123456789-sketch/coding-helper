@@ -26,6 +26,9 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.match(html, /两数之和/);
   assert.match(html, /运行测试/);
   assert.match(html, /逐行解释/);
+  assert.match(html, /字体大小调节/);
+  assert.match(html, /type="range"/);
+  assert.match(html, /113%/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 

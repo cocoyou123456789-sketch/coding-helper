@@ -33,6 +33,7 @@
 
 html {
   background: var(--paper);
+  font-size: var(--app-font-size, 18px);
 }
 
 body {
@@ -131,7 +132,7 @@ a {
   color: #fff;
   display: inline-flex;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   height: 36px;
   justify-content: center;
@@ -141,14 +142,14 @@ a {
 
 .brand-block strong {
   display: block;
-  font-size: 17px;
+  font-size: 1.0625rem;
   letter-spacing: -0.03em;
 }
 
 .brand-block div > span {
   color: var(--muted);
   display: block;
-  font-size: 11px;
+  font-size: 0.6875rem;
   margin-top: 2px;
 }
 
@@ -164,12 +165,12 @@ a {
 .header-progress-copy span,
 .header-progress b {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 
 .header-progress-copy strong {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .progress-track {
@@ -194,11 +195,70 @@ a {
   justify-content: flex-end;
 }
 
+.font-size-control {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+  height: 38px;
+  padding: 0 6px;
+}
+
+.font-size-control > span {
+  color: var(--muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  margin-right: 1px;
+}
+
+.font-size-control button {
+  align-items: center;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: inline-flex;
+  font-size: 0.625rem;
+  font-weight: 800;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+
+.font-size-control button:hover:not(:disabled) {
+  border-color: var(--teal);
+  color: var(--teal-dark);
+}
+
+.font-size-control button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.font-size-control input {
+  accent-color: var(--teal);
+  cursor: ew-resize;
+  margin: 0;
+  width: 58px;
+}
+
+.font-size-control output {
+  color: var(--teal-dark);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.5625rem;
+  font-weight: 750;
+  min-width: 35px;
+  text-align: right;
+}
+
 .save-state {
   align-items: center;
   color: var(--muted);
   display: inline-flex;
-  font-size: 11px;
+  font-size: 0.6875rem;
   gap: 7px;
   white-space: nowrap;
 }
@@ -215,7 +275,7 @@ a {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   min-height: 36px;
   padding: 0 13px;
@@ -253,7 +313,7 @@ a {
 
 .section-kicker {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 800;
   letter-spacing: 0.14em;
 }
@@ -275,14 +335,14 @@ a {
 }
 
 .library-title-row h1 {
-  font-size: 20px;
+  font-size: 1.25rem;
   letter-spacing: -0.045em;
   margin: 0;
 }
 
 .library-title-row > span {
   color: var(--teal);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
 }
 
@@ -293,7 +353,7 @@ a {
 
 .search-field > span[aria-hidden] {
   color: var(--muted);
-  font-size: 18px;
+  font-size: 1.125rem;
   left: 10px;
   line-height: 1;
   position: absolute;
@@ -304,7 +364,7 @@ a {
   background: #f4f2ec;
   border: 1px solid var(--line);
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 0.75rem;
   height: 36px;
   padding: 0 11px 0 32px;
   width: 100%;
@@ -318,7 +378,7 @@ a {
   align-items: center;
   color: var(--muted);
   display: grid;
-  font-size: 11px;
+  font-size: 0.6875rem;
   gap: 8px;
   grid-template-columns: auto 1fr;
   margin-top: 9px;
@@ -329,7 +389,7 @@ a {
   background: #f4f2ec;
   border: 1px solid var(--line);
   border-radius: 9px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   height: 32px;
   padding: 0 28px 0 10px;
   width: 100%;
@@ -354,12 +414,12 @@ a {
 }
 
 .mini-stats strong {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .mini-stats span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
   margin-top: 1px;
 }
 
@@ -420,7 +480,7 @@ a {
 .problem-number {
   color: var(--muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 10px;
+  font-size: 0.625rem;
   text-align: right;
 }
 
@@ -437,19 +497,19 @@ a {
 }
 
 .problem-name strong {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 
 .problem-name small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
   margin-top: 2px;
 }
 
 .difficulty {
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: 700;
   padding: 3px 5px;
 }
@@ -488,7 +548,7 @@ a {
   display: flex;
   flex: 0 0 auto;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 0.5625rem;
   height: 28px;
   justify-content: center;
   width: 28px;
@@ -496,7 +556,7 @@ a {
 
 .library-tip p {
   color: #aebdb8;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.5;
   margin: 0;
 }
@@ -504,7 +564,7 @@ a {
 .library-tip strong {
   color: #f7faf8;
   display: block;
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 /* Focus area */
@@ -525,7 +585,7 @@ a {
 
 .brief-topline {
   color: var(--editor-muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
   justify-content: space-between;
   letter-spacing: 0.08em;
 }
@@ -547,7 +607,7 @@ a {
 }
 
 .brief-title-row h2 {
-  font-size: 22px;
+  font-size: 1.375rem;
   letter-spacing: -0.04em;
   margin: 0 3px 0 0;
 }
@@ -555,7 +615,7 @@ a {
 .brief-difficulty,
 .topic-badge {
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 700;
   padding: 4px 7px;
 }
@@ -567,7 +627,7 @@ a {
 
 .problem-summary {
   color: #bdcbc6;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.65;
   margin: 9px 0 0;
   max-width: 900px;
@@ -582,7 +642,7 @@ a {
 
 .example-row > span {
   color: var(--editor-muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -593,7 +653,7 @@ a {
   border-radius: 7px;
   color: #dbe7e2;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 10px;
+  font-size: 0.625rem;
   padding: 4px 7px;
 }
 
@@ -611,14 +671,14 @@ a {
 
 .hint-row > span {
   color: var(--mint);
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 750;
 }
 
 .hint-row p,
 .hint-row b {
   color: #9fb0aa;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.45;
   margin: 0;
 }
@@ -646,20 +706,20 @@ a {
   border: 1px solid #3b4b45;
   border-radius: 8px;
   color: #d8e3df;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   padding: 6px 8px;
 }
 
 .shortcut-label {
   color: #74847e;
-  font-size: 9px;
+  font-size: 0.5625rem;
 }
 
 .dark-button,
 .run-button {
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   height: 30px;
   padding: 0 10px;
@@ -689,7 +749,7 @@ a {
 }
 
 .run-button span {
-  font-size: 8px;
+  font-size: 0.5rem;
 }
 
 .code-editor-wrap {
@@ -705,7 +765,7 @@ a {
   border-right: 1px solid #26322e;
   color: #53625d;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 25px;
   overflow: hidden;
   padding: 13px 11px 13px 0;
@@ -728,7 +788,7 @@ a {
   color: #dce9e4;
   display: block;
   font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.75rem;
   height: 100%;
   line-height: 25px;
   min-height: 210px;
@@ -760,18 +820,18 @@ a {
 }
 
 .console-head > div:first-child strong {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .console-head > div:first-child span {
   color: var(--editor-muted);
-  font-size: 8px;
+  font-size: 0.5rem;
   margin-top: 2px;
 }
 
 .console-status {
   color: #b9c8c3;
-  font-size: 9px;
+  font-size: 0.5625rem;
   gap: 7px;
   justify-content: flex-end;
   text-align: right;
@@ -831,12 +891,12 @@ a {
 
 .test-card-title strong {
   color: #dce6e2;
-  font-size: 9px;
+  font-size: 0.5625rem;
 }
 
 .test-card-title span {
   color: var(--mint);
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: 700;
 }
 
@@ -849,7 +909,7 @@ a {
   color: #c2cec9;
   display: grid;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 0.5rem;
   gap: 7px;
   grid-template-columns: 28px minmax(0, 1fr);
   line-height: 1.45;
@@ -870,7 +930,7 @@ a {
 
 .stdout-block {
   color: #aab9b4;
-  font-size: 9px;
+  font-size: 0.5625rem;
   margin-top: 8px;
 }
 
@@ -897,7 +957,7 @@ a {
 }
 
 .notes-head h2 {
-  font-size: 17px;
+  font-size: 1.0625rem;
   letter-spacing: -0.035em;
   margin: 4px 0 0;
 }
@@ -906,7 +966,7 @@ a {
   background: var(--teal-soft);
   border-radius: 999px;
   color: var(--teal-dark);
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 700;
   padding: 5px 7px;
 }
@@ -924,7 +984,7 @@ a {
   border: 0;
   border-bottom: 2px solid transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
 }
 
@@ -952,7 +1012,7 @@ a {
 
 .line-note-intro p {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1.4;
   margin: 0;
 }
@@ -967,7 +1027,7 @@ a {
   border: 0;
   color: var(--teal);
   flex: 0 0 auto;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 750;
   padding: 4px;
 }
@@ -991,7 +1051,7 @@ a {
   color: var(--teal-dark);
   display: flex;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 0.5rem;
   height: 23px;
   justify-content: center;
   width: 23px;
@@ -1000,7 +1060,7 @@ a {
 .line-note-card > code {
   color: #3c4945;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 23px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1011,7 +1071,7 @@ a {
   background: #f6f4ee;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 0.625rem;
   grid-column: 2;
   line-height: 1.55;
   min-height: 48px;
@@ -1042,7 +1102,7 @@ a {
 .review-notes-view label > span {
   align-items: center;
   display: flex;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
   gap: 7px;
 }
@@ -1053,7 +1113,7 @@ a {
   border-radius: 50%;
   color: #fff;
   display: flex;
-  font-size: 8px;
+  font-size: 0.5rem;
   height: 20px;
   justify-content: center;
   width: 20px;
@@ -1062,7 +1122,7 @@ a {
 .review-notes-view small {
   color: var(--muted);
   display: block;
-  font-size: 9px;
+  font-size: 0.5625rem;
   margin: 4px 0 6px 27px;
 }
 
@@ -1070,7 +1130,7 @@ a {
   background: #f5f3ed;
   border: 1px solid var(--line);
   border-radius: 10px;
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.65;
   padding: 9px 10px;
   resize: vertical;
@@ -1093,7 +1153,7 @@ a {
 .mastery-box > span {
   color: var(--muted);
   display: block;
-  font-size: 9px;
+  font-size: 0.5625rem;
   font-weight: 700;
   margin-bottom: 7px;
 }
@@ -1108,7 +1168,7 @@ a {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  font-size: 8px;
+  font-size: 0.5rem;
   font-weight: 700;
   height: 29px;
   padding: 0 3px;
@@ -1144,7 +1204,7 @@ a {
 }
 
 .guide-dialog h2 {
-  font-size: 22px;
+  font-size: 1.375rem;
   letter-spacing: -0.04em;
   margin: 5px 0 18px;
 }
@@ -1153,7 +1213,7 @@ a {
   background: #ece9e1;
   border: 0;
   border-radius: 50%;
-  font-size: 18px;
+  font-size: 1.125rem;
   height: 30px;
   line-height: 1;
   position: absolute;
@@ -1182,21 +1242,27 @@ a {
   border-radius: 9px;
   color: var(--teal-dark);
   display: flex;
-  font-size: 11px;
+  font-size: 0.6875rem;
   height: 30px;
   justify-content: center;
 }
 
 .guide-dialog li strong {
   display: block;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .guide-dialog li p {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.55;
   margin: 3px 0 0;
+}
+
+@media (max-width: 1650px) {
+  .save-state {
+    display: none;
+  }
 }
 
 @media (max-width: 1400px) {
@@ -1217,7 +1283,7 @@ a {
   }
 
   .problem-summary {
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
 }
 
@@ -1276,6 +1342,14 @@ a {
     display: none;
   }
 
+  .font-size-control > span {
+    display: none;
+  }
+
+  .font-size-control input {
+    width: 44px;
+  }
+
   .workspace {
     display: block;
   }
@@ -1305,7 +1379,7 @@ a {
   }
 
   .brief-title-row h2 {
-    font-size: 19px;
+    font-size: 1.1875rem;
   }
 
   .hint-row {
@@ -1362,6 +1436,23 @@ a {
 
   .notes-panel {
     min-height: 680px;
+  }
+}
+
+@media (max-width: 480px) {
+  .font-size-control input {
+    display: none;
+  }
+
+  .button-quiet {
+    font-size: 0;
+    padding: 0;
+    width: 36px;
+  }
+
+  .button-quiet::after {
+    content: "?";
+    font-size: 1rem;
   }
 }
 
