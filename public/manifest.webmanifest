@@ -1,0 +1,50 @@
+{
+  "id": "./",
+  "name": "题解簿 · AlgoQuest",
+  "short_name": "题解簿",
+  "description": "游戏化学习 LeetCode Hot 100：小课、闪卡、代码测试和逐行笔记。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#f3f0e8",
+  "theme_color": "#15231f",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "学习路径",
+      "short_name": "学习路径",
+      "description": "继续每日小课和复习",
+      "url": "./?mode=path"
+    },
+    {
+      "name": "开始刷题",
+      "short_name": "刷题",
+      "description": "打开 Hot 100 代码工作台",
+      "url": "./?mode=workspace"
+    }
+  ]
+}

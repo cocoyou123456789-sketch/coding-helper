@@ -33,13 +33,19 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.match(html, /调整字体大小/);
   assert.match(html, /type="range"/);
   assert.match(html, /113%/);
+  assert.match(html, /manifest\.webmanifest/);
+  assert.match(html, /apple-mobile-web-app-capable/);
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(html, /theme-color/);
+  assert.doesNotMatch(html, /_vinext_fonts/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
 test("ships 100 problems, the Python runner, and Pages workflow", async () => {
-  const [problemSource, pageSource, detailA, detailB, detailC, englishA, englishB, englishC, workerSource, workflowSource] = await Promise.all([
+  const [problemSource, pageSource, pwaSource, detailA, detailB, detailC, englishA, englishB, englishC, workerSource, serviceWorkerSource, manifestSource, workflowSource] = await Promise.all([
     readFile(new URL("../app/problems.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/pwa-installer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-details-a.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-details-b.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-details-c.ts", import.meta.url), "utf8"),
@@ -47,8 +53,11 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
     readFile(new URL("../app/problem-i18n-b.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-i18n-c.ts", import.meta.url), "utf8"),
     readFile(new URL("../public/python-worker.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8"),
   ]);
+  const manifest = JSON.parse(manifestSource);
 
   assert.equal((problemSource.match(/\bq\(\{ id:/g) ?? []).length, 100);
   assert.equal(([detailA, detailB, detailC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 100);
@@ -58,9 +67,23 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.match(pageSource, /运行测试/);
   assert.match(pageSource, /逐行解释/);
   assert.match(pageSource, /打开力扣官方原题/);
+  assert.match(pageSource, /mobile-workspace-tabs/);
+  assert.match(pageSource, /wrap="off"/);
+  assert.match(pwaSource, /serviceWorker\.register/);
+  assert.match(pwaSource, /安装 App/);
   assert.match(workerSource, /Pyodide/);
   assert.match(workerSource, /build_list = make_list/);
+  assert.match(serviceWorkerSource, /self\.registration\.scope/);
+  assert.equal(manifest.start_url, "./?source=pwa");
+  assert.equal(manifest.scope, "./");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.icons.length, 3);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/favicon.png", import.meta.url));
+  await access(new URL("../public/icons/apple-touch-icon.png", import.meta.url));
+  await access(new URL("../public/icons/icon-192.png", import.meta.url));
+  await access(new URL("../public/icons/icon-512.png", import.meta.url));
+  await access(new URL("../public/icons/icon-maskable-512.png", import.meta.url));
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
 });

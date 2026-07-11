@@ -28,6 +28,8 @@
   --learn-purple: #796ee6;
   --learn-purple-soft: #eeebff;
   --learn-blue: #57a8f5;
+  --font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-code: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --shadow: 0 14px 38px rgba(25, 35, 32, 0.07);
   --radius: 18px;
 }
@@ -39,6 +41,8 @@
 html {
   background: var(--paper);
   font-size: var(--app-font-size, 18px);
+  min-height: 100%;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -47,8 +51,9 @@ body {
     radial-gradient(circle at 22% 8%, rgba(13, 118, 104, 0.035), transparent 26rem),
     var(--paper);
   color: var(--ink);
-  font-family: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
 }
 
 button,
@@ -93,7 +98,7 @@ a {
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 0 18px 18px;
 }
 
@@ -136,7 +141,7 @@ a {
   border-radius: 11px;
   color: #fff;
   display: inline-flex;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.875rem;
   font-weight: 700;
   height: 36px;
@@ -200,6 +205,43 @@ a {
   justify-content: flex-end;
 }
 
+.pwa-install-trigger {
+  align-items: center;
+  background: var(--teal-soft);
+  border-color: #bcded4;
+  color: var(--teal-dark);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.pwa-install-trigger > span {
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.pwa-offline-badge {
+  align-items: center;
+  background: var(--warning-soft);
+  border-radius: 999px;
+  color: #80530d;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 9px;
+}
+
+.pwa-offline-badge i {
+  background: #bd7e16;
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
 .font-size-control {
   align-items: center;
   background: rgba(255, 255, 255, 0.55);
@@ -252,7 +294,7 @@ a {
 
 .font-size-control output {
   color: var(--teal-dark);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5625rem;
   font-weight: 750;
   min-width: 35px;
@@ -336,10 +378,14 @@ a {
   display: grid;
   gap: 12px;
   grid-template-columns: 276px minmax(620px, 1fr) 410px;
-  height: calc(100vh - 94px);
+  height: calc(100dvh - 94px);
   margin: 0 auto;
   max-width: 1920px;
   min-height: 690px;
+}
+
+.mobile-workspace-tabs {
+  display: none;
 }
 
 .panel {
@@ -520,7 +566,7 @@ a {
 
 .problem-number {
   color: var(--muted);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.625rem;
   text-align: right;
 }
@@ -588,7 +634,7 @@ a {
   color: var(--mint);
   display: flex;
   flex: 0 0 auto;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5625rem;
   height: 28px;
   justify-content: center;
@@ -772,7 +818,7 @@ a {
 
 .statement-facts code {
   color: #dce8e3;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5625rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -812,7 +858,7 @@ a {
   border: 1px solid var(--editor-line);
   border-radius: 7px;
   color: #dbe7e2;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.625rem;
   padding: 4px 7px;
 }
@@ -859,6 +905,10 @@ a {
 .editor-meta,
 .editor-actions {
   gap: 8px;
+}
+
+.mobile-editor-tools {
+  display: none;
 }
 
 .language-pill {
@@ -924,7 +974,7 @@ a {
 .line-numbers {
   border-right: 1px solid #26322e;
   color: #53625d;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.6875rem;
   line-height: 25px;
   overflow: hidden;
@@ -947,7 +997,7 @@ a {
   caret-color: var(--mint);
   color: #dce9e4;
   display: block;
-  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-code);
   font-size: 0.75rem;
   height: 100%;
   line-height: 25px;
@@ -1068,7 +1118,7 @@ a {
   align-items: flex-start;
   color: #c2cec9;
   display: grid;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5rem;
   gap: 7px;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -1078,7 +1128,7 @@ a {
 
 .test-card p > span {
   color: #73837d;
-  font-family: var(--font-geist-sans), sans-serif;
+  font-family: var(--font-ui);
 }
 
 .test-card code {
@@ -1210,7 +1260,7 @@ a {
   border-radius: 7px;
   color: var(--teal-dark);
   display: flex;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5rem;
   height: 23px;
   justify-content: center;
@@ -1219,7 +1269,7 @@ a {
 
 .line-note-card > code {
   color: #3c4945;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5625rem;
   line-height: 23px;
   overflow: hidden;
@@ -1733,7 +1783,7 @@ a {
   border-radius: 10px;
   color: #fff;
   display: flex;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.5625rem;
   height: 35px;
   justify-content: center;
@@ -1862,7 +1912,7 @@ a {
   border-radius: 24px;
   margin: 0 auto;
   max-width: 1300px;
-  min-height: calc(100vh - 94px);
+  min-height: calc(100dvh - 94px);
   overflow: hidden;
 }
 
@@ -1919,7 +1969,7 @@ a {
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: calc(100vh - 190px);
+  min-height: calc(100dvh - 190px);
   padding: 20px 28px 56px;
 }
 
@@ -1990,7 +2040,7 @@ a {
 }
 
 .concept-example code {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-code);
   font-size: 0.625rem;
   overflow-wrap: anywhere;
 }
@@ -2300,6 +2350,110 @@ a {
   width: 32px;
 }
 
+/* App installation */
+.install-backdrop {
+  align-items: center;
+  background: rgba(12, 19, 17, 0.64);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  position: fixed;
+  z-index: 80;
+}
+
+.install-dialog {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 30px 90px rgba(8, 16, 13, 0.36);
+  max-height: calc(100dvh - 36px);
+  max-width: 470px;
+  overflow-y: auto;
+  padding: 27px;
+  text-align: center;
+  width: 100%;
+}
+
+.install-icon {
+  align-items: center;
+  background: var(--ink);
+  border-radius: 18px;
+  box-shadow: inset 0 -5px 0 rgba(81, 208, 174, 0.22);
+  color: var(--mint);
+  display: flex;
+  font-family: var(--font-code);
+  font-size: 1.25rem;
+  font-weight: 900;
+  height: 68px;
+  justify-content: center;
+  letter-spacing: -0.14em;
+  margin: 0 auto 17px;
+  width: 68px;
+}
+
+.install-dialog h2 {
+  font-size: 1.25rem;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.install-dialog > p {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  margin: 8px auto 20px;
+  max-width: 390px;
+}
+
+.install-dialog ol {
+  display: grid;
+  gap: 9px;
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  text-align: left;
+}
+
+.install-dialog li {
+  align-items: center;
+  background: #f0eee7;
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 32px 1fr;
+  min-height: 52px;
+  padding: 8px 11px;
+}
+
+.install-dialog li b {
+  align-items: center;
+  background: var(--teal);
+  border-radius: 9px;
+  color: #fff;
+  display: flex;
+  font-size: 0.6875rem;
+  height: 32px;
+  justify-content: center;
+}
+
+.install-dialog li span {
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.install-dialog .learn-primary {
+  min-width: 150px;
+}
+
+.install-network-note {
+  color: var(--muted);
+  display: block;
+  font-size: 0.5625rem;
+  line-height: 1.5;
+  margin: -5px 0 17px;
+}
+
 /* Beginner guide */
 .guide-backdrop {
   align-items: center;
@@ -2425,7 +2579,7 @@ a {
 
   .library-panel,
   .focus-panel {
-    height: calc(100vh - 92px);
+    height: calc(100dvh - 92px);
     min-height: 680px;
   }
 
@@ -2457,18 +2611,59 @@ a {
 
 @media (max-width: 760px) {
   .app-shell {
-    padding: 0 8px 14px;
+    padding: 0 max(8px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   }
 
   .site-header {
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
-    grid-template-columns: 1fr auto;
-    height: 68px;
+    height: auto;
+    min-height: 68px;
+    padding: max(9px, env(safe-area-inset-top)) 0 8px;
   }
 
   .brand-block div > span,
   .header-progress {
     display: none;
+  }
+
+  .brand-block {
+    flex: 1 0 100%;
+    min-height: 36px;
+  }
+
+  .header-actions {
+    gap: 6px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 1px;
+    scrollbar-width: none;
+    width: 100%;
+  }
+
+  .header-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .language-toggle button,
+  .font-size-control button,
+  .mode-toggle,
+  .pwa-install-trigger {
+    min-height: 44px;
+  }
+
+  .font-size-control {
+    height: 48px;
+  }
+
+  .font-size-control button {
+    height: 38px;
+    width: 38px;
+  }
+
+  .language-toggle button {
+    min-width: 42px;
   }
 
   .font-size-control > span {
@@ -2516,7 +2711,7 @@ a {
 
   .activity-screen {
     border-radius: 16px;
-    min-height: calc(100vh - 82px);
+    min-height: calc(100dvh - 116px);
   }
 
   .activity-topbar {
@@ -2526,7 +2721,7 @@ a {
   }
 
   .lesson-stage {
-    min-height: calc(100vh - 150px);
+    min-height: calc(100dvh - 184px);
     padding: 12px 10px 32px;
   }
 
@@ -2556,6 +2751,55 @@ a {
     display: block;
   }
 
+  .mobile-workspace-tabs {
+    backdrop-filter: blur(16px);
+    background: rgba(243, 240, 232, 0.9);
+    border: 1px solid rgba(201, 197, 186, 0.9);
+    border-radius: 14px;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 8px;
+    padding: 4px;
+    position: sticky;
+    top: max(6px, env(safe-area-inset-top));
+    z-index: 40;
+  }
+
+  .mobile-workspace-tabs button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    color: var(--muted);
+    display: flex;
+    font-size: 0.625rem;
+    font-weight: 800;
+    gap: 6px;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0 6px;
+  }
+
+  .mobile-workspace-tabs button.is-active {
+    background: var(--ink);
+    box-shadow: 0 4px 12px rgba(20, 31, 27, 0.16);
+    color: #fff;
+  }
+
+  .mobile-workspace-tabs button span {
+    color: var(--mint);
+    font-family: var(--font-code);
+  }
+
+  .workspace .mobile-workspace-pane {
+    display: none;
+  }
+
+  .workspace .mobile-workspace-pane.is-mobile-active {
+    display: flex;
+  }
+
   .panel {
     border-radius: 15px;
     margin-bottom: 10px;
@@ -2569,7 +2813,8 @@ a {
   }
 
   .problem-list {
-    max-height: 340px;
+    max-height: calc(100dvh - 390px);
+    min-height: 260px;
   }
 
   .library-tip {
@@ -2594,18 +2839,74 @@ a {
   }
 
   .editor-toolbar {
+    flex-wrap: wrap;
     gap: 8px;
     height: auto;
-    min-height: 48px;
+    min-height: 58px;
+    padding: 7px 10px;
   }
 
-  .shortcut-label,
-  .dark-button {
+  .shortcut-label {
     display: none;
   }
 
+  .dark-button,
+  .run-button {
+    align-items: center;
+    display: inline-flex;
+    height: 44px;
+  }
+
+  .mobile-editor-tools {
+    display: inline-flex;
+    gap: 4px;
+  }
+
+  .mobile-editor-tools button {
+    align-items: center;
+    background: #26332f;
+    border: 1px solid #3a4944;
+    border-radius: 8px;
+    color: var(--mint);
+    display: flex;
+    font-family: var(--font-code);
+    font-weight: 900;
+    height: 44px;
+    justify-content: center;
+    width: 44px;
+  }
+
   .code-editor-wrap {
-    height: 360px;
+    height: min(48dvh, 440px);
+    min-height: 330px;
+  }
+
+  .code-field textarea {
+    font-size: max(16px, 0.75rem);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .line-numbers {
+    font-size: max(13px, 0.6875rem);
+  }
+
+  .search-field input,
+  .topic-field select,
+  .line-note-card textarea,
+  .review-notes-view textarea {
+    font-size: max(16px, 0.75rem);
+  }
+
+  .search-field input,
+  .topic-field select {
+    height: 44px;
+  }
+
+  .statement-head button,
+  .difficulty-filter-bar button,
+  .status-buttons button,
+  .guide-close {
+    min-height: 44px;
   }
 
   .test-console {
@@ -2633,11 +2934,26 @@ a {
 
   .line-notes-view,
   .review-notes-view {
-    max-height: 620px;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .notes-panel {
-    min-height: 680px;
+    min-height: 0;
+  }
+
+  .status-buttons {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .status-buttons button {
+    height: 44px;
+  }
+
+  .guide-dialog,
+  .install-dialog {
+    max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
   }
 }
 

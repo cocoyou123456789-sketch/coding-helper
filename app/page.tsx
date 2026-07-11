@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
+import PwaInstaller from "./pwa-installer";
 
 export const dynamic = "force-static";
 
@@ -62,6 +63,12 @@ const pageCopy = {
     autosave: "笔记自动保存在本机",
     freePractice: "刷题",
     learningPath: "路径",
+    mobileProblemList: "题库",
+    mobileCode: "代码",
+    mobileNotes: "笔记",
+    mobileWorkspace: "手机刷题导航",
+    indent: "缩进",
+    outdent: "减少缩进",
     fontSize: "字号",
     decreaseFont: "减小字体",
     increaseFont: "增大字体",
@@ -152,6 +159,12 @@ const pageCopy = {
     autosave: "Notes save automatically on this device",
     freePractice: "Practice",
     learningPath: "Path",
+    mobileProblemList: "Problems",
+    mobileCode: "Code",
+    mobileNotes: "Notes",
+    mobileWorkspace: "Mobile practice navigation",
+    indent: "Indent",
+    outdent: "Outdent",
     fontSize: "Text",
     decreaseFont: "Decrease text size",
     increaseFont: "Increase text size",
@@ -337,8 +350,10 @@ export default function Home() {
   const [showStatement, setShowStatement] = useState(true);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [appMode, setAppMode] = useState<"path" | "workspace">("path");
+  const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<"library" | "code" | "notes">("library");
   const [profile, setProfile] = useState<LearningProfile>(EMPTY_PROFILE);
   const workerRef = useRef<Worker | null>(null);
+  const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const lineNumbersRef = useRef<HTMLDivElement | null>(null);
@@ -385,7 +400,15 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       try {
         const savedLanguage = window.localStorage.getItem(LANGUAGE_KEY);
-        if (savedLanguage === "zh" || savedLanguage === "en") setLanguage(savedLanguage);
+        if (savedLanguage === "zh" || savedLanguage === "en") {
+          setLanguage(savedLanguage);
+          setRunState({ phase: "idle", message: pageCopy[savedLanguage].notRun, results: [] });
+        }
+        const requestedMode = new URLSearchParams(window.location.search).get("mode");
+        if (requestedMode === "path" || requestedMode === "workspace") {
+          setAppMode(requestedMode);
+          if (requestedMode === "workspace") setMobileWorkspaceTab("library");
+        }
         const saved = window.localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved) as { records?: StudyRecords; selectedId?: number };
@@ -440,10 +463,6 @@ export default function Home() {
     document.title = language === "zh"
       ? "题解簿｜LeetCode Hot 100 小白学习工作台"
       : "AlgoQuest | LeetCode Hot 100 Learning Path";
-    setTopic("all");
-    setRunState((previous) => previous.phase === "running"
-      ? previous
-      : { phase: "idle", message: pageCopy[language].notRun, results: [] });
     if (!hydrated) return;
     window.localStorage.setItem(LANGUAGE_KEY, language);
   }, [hydrated, language]);
@@ -511,6 +530,7 @@ export default function Home() {
   function openProblemFromPath(id: number) {
     chooseProblem(id);
     setAppMode("workspace");
+    setMobileWorkspaceTab("code");
   }
 
   function chooseProblem(id: number) {
@@ -518,6 +538,24 @@ export default function Home() {
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setNoteTab("line");
     setShowStatement(true);
+    setMobileWorkspaceTab("code");
+  }
+
+  function toggleAppMode() {
+    if (appMode === "path") {
+      setAppMode("workspace");
+      setMobileWorkspaceTab("library");
+      return;
+    }
+    setAppMode("path");
+  }
+
+  function selectLanguage(nextLanguage: Language) {
+    setLanguage(nextLanguage);
+    setTopic("all");
+    setRunState((previous) => previous.phase === "running"
+      ? previous
+      : { phase: "idle", message: pageCopy[nextLanguage].notRun, results: [] });
   }
 
   function updateLineNote(index: number, value: string) {
@@ -538,31 +576,99 @@ export default function Home() {
     setRunState({ phase: "idle", message: copy.resetMessage, results: [] });
   }
 
+  function adjustEditorIndent(direction: "in" | "out") {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const code = currentRecord.code;
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+
+    if (start === end) {
+      if (direction === "in") {
+        const nextCode = `${code.slice(0, start)}    ${code.slice(end)}`;
+        updateRecord({ code: nextCode });
+        window.requestAnimationFrame(() => {
+          editor.focus();
+          editor.selectionStart = editor.selectionEnd = start + 4;
+        });
+        return;
+      }
+
+      const lineStart = code.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      const leadingSpaces = code.slice(lineStart, start).match(/^ {1,4}/)?.[0].length ?? 0;
+      if (!leadingSpaces) return;
+      const nextCode = `${code.slice(0, lineStart)}${code.slice(lineStart + leadingSpaces)}`;
+      updateRecord({ code: nextCode });
+      window.requestAnimationFrame(() => {
+        editor.focus();
+        editor.selectionStart = editor.selectionEnd = Math.max(lineStart, start - leadingSpaces);
+      });
+      return;
+    }
+
+    const blockStart = code.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+    const selectionEnd = code[end - 1] === "\n" ? end - 1 : end;
+    const nextBreak = code.indexOf("\n", selectionEnd);
+    const blockEnd = nextBreak === -1 ? code.length : nextBreak;
+    const lines = code.slice(blockStart, blockEnd).split("\n");
+    let removed = 0;
+    const nextLines = lines.map((line) => {
+      if (direction === "in") return `    ${line}`;
+      const count = line.match(/^ {1,4}/)?.[0].length ?? 0;
+      removed += count;
+      return line.slice(count);
+    });
+    const nextCode = `${code.slice(0, blockStart)}${nextLines.join("\n")}${code.slice(blockEnd)}`;
+    const firstRemoved = direction === "out" ? (lines[0].match(/^ {1,4}/)?.[0].length ?? 0) : -4;
+    const nextStart = Math.max(blockStart, start - firstRemoved);
+    const nextEnd = direction === "in" ? end + (lines.length * 4) : Math.max(nextStart, end - removed);
+    updateRecord({ code: nextCode });
+    window.requestAnimationFrame(() => {
+      editor.focus();
+      editor.selectionStart = nextStart;
+      editor.selectionEnd = nextEnd;
+    });
+  }
+
   function runTests() {
     if (runState.phase === "running") return;
 
-    workerRef.current?.terminate();
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-    const worker = new Worker(`${basePath}/python-worker.js`);
+    const worker = workerRef.current ?? new Worker(`${basePath}/python-worker.js`);
     workerRef.current = worker;
     setRunState({ phase: "running", message: copy.loadingPython, results: [] });
     updateRecord({ status: currentRecord.status === "solved" ? "solved" : "learning" });
 
-    timeoutRef.current = setTimeout(() => {
-      worker.terminate();
-      workerRef.current = null;
-      setRunState({
-        phase: "error",
-        message: copy.timeout,
-        results: [],
-      });
-    }, 20_000);
+    function cleanupWorkerListeners() {
+      worker.removeEventListener("message", handleWorkerMessage);
+      worker.removeEventListener("error", handleWorkerError);
+    }
 
-    worker.onmessage = (event: MessageEvent) => {
+    const armTimeout = (duration: number) => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        cleanupWorkerListeners();
+        worker.terminate();
+        workerRef.current = null;
+        runtimeReadyRef.current = false;
+        setRunState({
+          phase: "error",
+          message: copy.timeout,
+          results: [],
+        });
+      }, duration);
+    };
+    armTimeout(runtimeReadyRef.current ? 20_000 : 90_000);
+
+    function handleWorkerMessage(event: MessageEvent) {
       const data = event.data;
       if (data.type === "status") {
+        if (data.status === "ready") {
+          runtimeReadyRef.current = true;
+          armTimeout(20_000);
+        }
         setRunState((previous) => ({
           phase: "running",
           message: language === "en" ? copy.runningCode : (data.message ?? copy.runningCode),
@@ -572,8 +678,7 @@ export default function Home() {
       }
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      worker.terminate();
-      workerRef.current = null;
+      cleanupWorkerListeners();
 
       if (data.type === "result") {
         const results = (data.results ?? []) as WorkerTestResult[];
@@ -595,18 +700,23 @@ export default function Home() {
         results: [],
         stdout: data.stdout ?? "",
       });
-    };
+    }
 
-    worker.onerror = (event) => {
+    function handleWorkerError(event: ErrorEvent) {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      cleanupWorkerListeners();
       worker.terminate();
       workerRef.current = null;
+      runtimeReadyRef.current = false;
       setRunState({
         phase: "error",
         message: event.message || copy.workerFailed,
         results: [],
       });
-    };
+    }
+
+    worker.addEventListener("message", handleWorkerMessage);
+    worker.addEventListener("error", handleWorkerError);
 
     worker.postMessage({
       id: String(currentProblem.id),
@@ -656,14 +766,15 @@ export default function Home() {
 
         <div className="header-actions">
           <span className="save-state"><i />{copy.autosave}</span>
+          <PwaInstaller language={language} />
           <div className="language-toggle" role="group" aria-label="Language / 语言">
-            <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} onClick={() => setLanguage("zh")}>中文</button>
-            <button type="button" lang="en" className={language === "en" ? "is-active" : ""} onClick={() => setLanguage("en")}>EN</button>
+            <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} onClick={() => selectLanguage("zh")}>中文</button>
+            <button type="button" lang="en" className={language === "en" ? "is-active" : ""} onClick={() => selectLanguage("en")}>EN</button>
           </div>
           <button
             className="button mode-toggle"
             type="button"
-            onClick={() => setAppMode((current) => current === "path" ? "workspace" : "path")}
+            onClick={toggleAppMode}
           >
             {appMode === "path" ? copy.freePractice : copy.learningPath}
           </button>
@@ -717,7 +828,18 @@ export default function Home() {
         />
       ) : (
         <div className="workspace">
-        <aside className="panel library-panel" aria-label={copy.libraryTitle}>
+        <nav className="mobile-workspace-tabs" role="tablist" aria-label={copy.mobileWorkspace}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("library")}>
+            <span aria-hidden="true">☷</span>{copy.mobileProblemList}
+          </button>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("code")}>
+            <span aria-hidden="true">{">_"}</span>{copy.mobileCode}
+          </button>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("notes")}>
+            <span aria-hidden="true">✎</span>{copy.mobileNotes}
+          </button>
+        </nav>
+        <aside id="mobile-library-panel" role="tabpanel" className={`panel library-panel mobile-workspace-pane ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`} aria-label={copy.libraryTitle}>
           <div className="library-head">
             <div className="section-kicker">LEARNING MAP</div>
             <div className="library-title-row">
@@ -783,7 +905,7 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="panel focus-panel" aria-label={`${currentProblem.title} · Python`}>
+        <section id="mobile-code-panel" role="tabpanel" className={`panel focus-panel mobile-workspace-pane ${mobileWorkspaceTab === "code" ? "is-mobile-active" : ""}`} aria-label={`${currentProblem.title} · Python`}>
           <article className="problem-brief">
             <div className="brief-topline">
               <span>HOT 100 / {currentProblem.topic}</span>
@@ -844,6 +966,10 @@ export default function Home() {
             <div className="editor-meta">
               <span className="language-pill">Python 3</span>
               <span className="shortcut-label">{copy.shortcut}</span>
+              <div className="mobile-editor-tools" role="group" aria-label={language === "zh" ? "代码缩进工具" : "Code indentation tools"}>
+                <button type="button" onClick={() => adjustEditorIndent("out")} aria-label={copy.outdent}>←</button>
+                <button type="button" onClick={() => adjustEditorIndent("in")} aria-label={copy.indent}>→</button>
+              </div>
             </div>
             <div className="editor-actions">
               <button className="dark-button" type="button" onClick={resetCode}>{copy.resetCode}</button>
@@ -867,7 +993,10 @@ export default function Home() {
                 onScroll={(event) => {
                   if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop;
                 }}
+                wrap="off"
                 spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
                 aria-describedby="editor-help"
               />
             </label>
@@ -909,7 +1038,7 @@ export default function Home() {
           </section>
         </section>
 
-        <aside className="panel notes-panel" aria-label={copy.notebookLabel}>
+        <aside id="mobile-notes-panel" role="tabpanel" className={`panel notes-panel mobile-workspace-pane ${mobileWorkspaceTab === "notes" ? "is-mobile-active" : ""}`} aria-label={copy.notebookLabel}>
           <div className="notes-head">
             <div>
               <div className="section-kicker">MY NOTEBOOK</div>

@@ -42,7 +42,17 @@ jobs:
         run: |
           test -f dist/client/index.html
           test -f dist/client/python-worker.js
+          test -f dist/client/manifest.webmanifest
+          test -f dist/client/sw.js
+          test -f dist/client/favicon.png
+          test -f dist/client/icons/apple-touch-icon.png
+          test -f dist/client/icons/icon-192.png
+          test -f dist/client/icons/icon-512.png
+          test -f dist/client/icons/icon-maskable-512.png
+          node --check dist/client/sw.js
+          node -e 'const fs = require("fs"); const manifest = JSON.parse(fs.readFileSync("dist/client/manifest.webmanifest", "utf8")); if (manifest.scope !== "./" || manifest.display !== "standalone") process.exit(1)'
           grep -q '/coding-helper/' dist/client/index.html
+          grep -q '/coding-helper/manifest.webmanifest' dist/client/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
