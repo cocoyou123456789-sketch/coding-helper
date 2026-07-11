@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import LearningHub, { type LearningProfile } from "./learning-hub";
+import { problemDetails } from "./problem-details";
 import { problems, type Problem } from "./problems";
 
 export const dynamic = "force-static";
@@ -37,9 +39,19 @@ type RunState =
 
 const STORAGE_KEY = "leetcode-hot100-study-notebook-v1";
 const FONT_SIZE_KEY = "leetcode-hot100-font-size-v1";
+const PROFILE_KEY = "leetcode-hot100-learning-profile-v1";
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 24;
 const DEFAULT_FONT_SIZE = 18;
+
+const EMPTY_PROFILE: LearningProfile = {
+  xp: 0,
+  todayXp: 0,
+  todayDate: "",
+  streak: 0,
+  lessons: 0,
+  sprintBest: 0,
+};
 
 const statusLabels: Record<LearningStatus, string> = {
   todo: "未开始",
@@ -104,6 +116,19 @@ function pretty(value: unknown): string {
   }
 }
 
+function localDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function yesterdayKey(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return localDateKey(date);
+}
+
 export default function Home() {
   const [selectedId, setSelectedId] = useState(problems[0].id);
   const [records, setRecords] = useState<StudyRecords>({});
@@ -113,7 +138,10 @@ export default function Home() {
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
   const [hydrated, setHydrated] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showStatement, setShowStatement] = useState(true);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
+  const [appMode, setAppMode] = useState<"path" | "workspace">("path");
+  const [profile, setProfile] = useState<LearningProfile>(EMPTY_PROFILE);
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -124,6 +152,10 @@ export default function Home() {
     [selectedId],
   );
   const currentRecord = mergeRecord(currentProblem, records[currentProblem.id]);
+  const currentDetail = problemDetails[currentProblem.id] ?? {
+    statement: currentProblem.summary,
+    requirements: ["按照题目给出的输入完成函数。", "返回值或原地修改结果需要符合题目要求。"],
+  };
   const codeLines = currentRecord.code.split("\n");
   const fontScale = Math.round((fontSize / MIN_FONT_SIZE) * 100);
 
@@ -164,6 +196,15 @@ export default function Home() {
         if (Number.isInteger(savedFontSize) && savedFontSize >= MIN_FONT_SIZE && savedFontSize <= MAX_FONT_SIZE) {
           setFontSize(savedFontSize);
         }
+        const savedProfile = window.localStorage.getItem(PROFILE_KEY);
+        if (savedProfile) {
+          const loaded = { ...EMPTY_PROFILE, ...JSON.parse(savedProfile) } as LearningProfile;
+          if (loaded.todayDate !== localDateKey()) {
+            loaded.todayXp = 0;
+            if (loaded.todayDate !== yesterdayKey()) loaded.streak = 0;
+          }
+          setProfile(loaded);
+        }
       } catch {
         // A damaged local note should not stop the site from opening.
       } finally {
@@ -188,6 +229,11 @@ export default function Home() {
   }, [fontSize, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  }, [hydrated, profile]);
+
+  useEffect(() => {
     return () => {
       workerRef.current?.terminate();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -204,10 +250,59 @@ export default function Home() {
     }));
   }
 
+  function updateProblemStatus(id: number, status: LearningStatus) {
+    const problem = problems.find((item) => item.id === id);
+    if (!problem) return;
+    setRecords((previous) => {
+      const previousStatus = previous[id]?.status;
+      const nextStatus = previousStatus === "solved" && status !== "review" ? "solved" : status;
+      return {
+        ...previous,
+        [id]: {
+          ...mergeRecord(problem, previous[id]),
+          status: nextStatus,
+        },
+      };
+    });
+  }
+
+  function earnXp(points: number) {
+    setProfile((previous) => {
+      const today = localDateKey();
+      const isSameDay = previous.todayDate === today;
+      const nextStreak = isSameDay
+        ? Math.max(1, previous.streak)
+        : previous.todayDate === yesterdayKey()
+          ? previous.streak + 1
+          : 1;
+      return {
+        ...previous,
+        xp: previous.xp + points,
+        todayXp: (isSameDay ? previous.todayXp : 0) + points,
+        todayDate: today,
+        streak: nextStreak,
+      };
+    });
+  }
+
+  function finishLearningLesson() {
+    setProfile((previous) => ({ ...previous, lessons: previous.lessons + 1 }));
+  }
+
+  function updateSprintBest(score: number) {
+    setProfile((previous) => score > previous.sprintBest ? { ...previous, sprintBest: score } : previous);
+  }
+
+  function openProblemFromPath(id: number) {
+    chooseProblem(id);
+    setAppMode("workspace");
+  }
+
   function chooseProblem(id: number) {
     setSelectedId(id);
     setRunState({ phase: "idle", message: "还没有运行测试", results: [] });
     setNoteTab("line");
+    setShowStatement(true);
   }
 
   function updateLineNote(index: number, value: string) {
@@ -331,7 +426,7 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true">{"{ }"}</span>
           <div>
             <strong>题解簿</strong>
-            <span>LeetCode Hot 100 小白工作台</span>
+            <span>LeetCode Hot 100 游戏化学习</span>
           </div>
         </div>
 
@@ -346,6 +441,13 @@ export default function Home() {
 
         <div className="header-actions">
           <span className="save-state"><i />笔记自动保存在本机</span>
+          <button
+            className="button mode-toggle"
+            type="button"
+            onClick={() => setAppMode((current) => current === "path" ? "workspace" : "path")}
+          >
+            {appMode === "path" ? "自由刷题" : "学习路径"}
+          </button>
           <div className="font-size-control" aria-label="字体大小调节">
             <span>字号</span>
             <button
@@ -380,7 +482,19 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="workspace">
+      {appMode === "path" ? (
+        <LearningHub
+          problems={problems}
+          records={records}
+          profile={profile}
+          onEarnXp={earnXp}
+          onFinishLesson={finishLearningLesson}
+          onMarkStatus={updateProblemStatus}
+          onOpenProblem={openProblemFromPath}
+          onSprintBest={updateSprintBest}
+        />
+      ) : (
+        <div className="workspace">
         <aside className="panel library-panel" aria-label="Hot 100 题单">
           <div className="library-head">
             <div className="section-kicker">LEARNING MAP</div>
@@ -444,7 +558,7 @@ export default function Home() {
           <article className="problem-brief">
             <div className="brief-topline">
               <span>HOT 100 / {currentProblem.topic}</span>
-              <a href={`https://leetcode.cn/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">在力扣查看原题 ↗</a>
+              <a href={`https://leetcode.cn/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">打开力扣官方原题 ↗</a>
             </div>
             <div className="brief-title-row">
               <h2>{currentProblem.id}. {currentProblem.title}</h2>
@@ -453,11 +567,43 @@ export default function Home() {
               </span>
               <span className="topic-badge">{currentProblem.topic}</span>
             </div>
-            <p className="problem-summary">{currentProblem.summary}</p>
-            <div className="example-row">
-              <span>例子</span>
-              <code>{currentProblem.example}</code>
-            </div>
+            <section className={`statement-panel ${showStatement ? "is-open" : ""}`} aria-label="题目原意">
+              <div className="statement-head">
+                <div>
+                  <strong>题目原意</strong>
+                  <small>中文重述 · 完整限制以力扣原题为准</small>
+                </div>
+                <button
+                  type="button"
+                  aria-expanded={showStatement}
+                  onClick={() => setShowStatement((current) => !current)}
+                >
+                  {showStatement ? "收起题目" : "展开题目"}
+                </button>
+              </div>
+
+              {showStatement ? (
+                <div className="statement-body">
+                  <p>{currentDetail.statement}</p>
+                  <div className="statement-facts">
+                    <div>
+                      <span>函数输入</span>
+                      <code>{currentProblem.params.join(", ") || "无"}</code>
+                    </div>
+                    <div>
+                      <span>示例</span>
+                      <code>{currentProblem.example}</code>
+                    </div>
+                  </div>
+                  <div className="statement-requirements">
+                    <span>注意事项</span>
+                    <ul>{currentDetail.requirements.map((item) => <li key={item}>{item}</li>)}</ul>
+                  </div>
+                </div>
+              ) : (
+                <p className="problem-summary">{currentProblem.summary}</p>
+              )}
+            </section>
             <div className="hint-row">
               <span>小白提示</span>
               <p>{currentProblem.hint}</p>
@@ -605,21 +751,22 @@ export default function Home() {
             </div>
           </div>
         </aside>
-      </div>
+        </div>
+      )}
 
       {showGuide && (
         <div className="guide-backdrop" role="presentation" onMouseDown={() => setShowGuide(false)}>
           <section className="guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="guide-close" type="button" aria-label="关闭" onClick={() => setShowGuide(false)}>×</button>
             <div className="section-kicker">START HERE</div>
-            <h2 id="guide-title">第一次刷题，照着这 4 步来</h2>
+            <h2 id="guide-title">第一次学习，照着这 4 步来</h2>
             <ol>
-              <li><b>1</b><div><strong>先读懂输入和输出</strong><p>先别急着写代码，用一句话说清题目要你找什么。</p></div></li>
-              <li><b>2</b><div><strong>把思路拆成小步骤</strong><p>在右侧“思路与复盘”里写人话，不需要术语。</p></div></li>
-              <li><b>3</b><div><strong>一次只写一点代码</strong><p>写完就点“运行测试”，错误信息也是线索。</p></div></li>
-              <li><b>4</b><div><strong>解释每一行</strong><p>如果某一行解释不出来，说明这里还没有真正理解。</p></div></li>
+              <li><b>1</b><div><strong>先完成今日小课</strong><p>先看题意卡，再认题型和核心思路，不需要立刻写代码。</p></div></li>
+              <li><b>2</b><div><strong>用极速挑战练反应</strong><p>在 60 秒里快速判断题型、方法和复杂度。</p></div></li>
+              <li><b>3</b><div><strong>用闪卡安排复习</strong><p>没记住的内容会回到复习队列，不用自己安排顺序。</p></div></li>
+              <li><b>4</b><div><strong>最后进入完整代码题</strong><p>这时再写代码、运行测试并解释每一行，压力会小很多。</p></div></li>
             </ol>
-            <button className="button button-primary" type="button" onClick={() => setShowGuide(false)}>开始第一题</button>
+            <button className="button button-primary" type="button" onClick={() => { setAppMode("path"); setShowGuide(false); }}>去学习路径</button>
           </section>
         </div>
       )}

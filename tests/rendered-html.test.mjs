@@ -22,10 +22,12 @@ test("renders the Hot 100 learning workspace", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="zh-CN">/i);
   assert.match(html, /题解簿/);
-  assert.match(html, /Hot 100 题单/);
+  assert.match(html, /LeetCode Hot 100/);
   assert.match(html, /两数之和/);
-  assert.match(html, /运行测试/);
-  assert.match(html, /逐行解释/);
+  assert.match(html, /今天学一点/);
+  assert.match(html, /闯关小课/);
+  assert.match(html, /极速抢答/);
+  assert.match(html, /算法闪卡/);
   assert.match(html, /字体大小调节/);
   assert.match(html, /type="range"/);
   assert.match(html, /113%/);
@@ -33,14 +35,22 @@ test("renders the Hot 100 learning workspace", async () => {
 });
 
 test("ships 100 problems, the Python runner, and Pages workflow", async () => {
-  const [problemSource, workerSource, workflowSource] = await Promise.all([
+  const [problemSource, pageSource, detailA, detailB, detailC, workerSource, workflowSource] = await Promise.all([
     readFile(new URL("../app/problems.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/problem-details-a.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/problem-details-b.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/problem-details-c.ts", import.meta.url), "utf8"),
     readFile(new URL("../public/python-worker.js", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8"),
   ]);
 
   assert.equal((problemSource.match(/\bq\(\{ id:/g) ?? []).length, 100);
+  assert.equal(([detailA, detailB, detailC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 100);
   assert.match(problemSource, /id: 32, title: "最长有效括号"/);
+  assert.match(pageSource, /运行测试/);
+  assert.match(pageSource, /逐行解释/);
+  assert.match(pageSource, /打开力扣官方原题/);
   assert.match(workerSource, /Pyodide/);
   assert.match(workerSource, /build_list = make_list/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);

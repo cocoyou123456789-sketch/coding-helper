@@ -17,7 +17,7 @@ const siteUrl = "https://cocoyou123456789-sketch.github.io/coding-helper";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "题解簿｜LeetCode Hot 100 小白学习工作台",
-  description: "一边刷 LeetCode Hot 100，一边逐行解释代码、记笔记并运行 Python 快速测试。",
+  description: "用每日小课、极速抢答、算法闪卡和代码挑战，循序渐进学习 LeetCode Hot 100。",
   applicationName: "题解簿",
   icons: {
     icon: `${siteUrl}/favicon.svg`,
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "题解簿｜LeetCode Hot 100",
-    description: "写代码、逐行解释、做笔记、跑测试——为算法小白设计的刷题工作台。",
+    description: "每日小课、极速抢答、算法闪卡、代码测试——为算法小白设计的游戏化学习路径。",
     type: "website",
     locale: "zh_CN",
     url: siteUrl,
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "题解簿｜LeetCode Hot 100",
-    description: "写代码、逐行解释、做笔记、跑测试。",
+    description: "用小课、抢答和闪卡学习 LeetCode Hot 100。",
     images: [`${siteUrl}/og.png`],
   },
 };
