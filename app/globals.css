@@ -307,6 +307,31 @@ a {
   border-color: var(--teal);
 }
 
+.language-toggle {
+  background: #e8e5dc;
+  border-radius: 10px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+}
+
+.language-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 0 8px;
+}
+
+.language-toggle button.is-active {
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(25, 35, 32, 0.1);
+  color: var(--teal-dark);
+}
+
 .workspace {
   display: grid;
   gap: 12px;
@@ -1514,6 +1539,55 @@ a {
   margin-top: 2px;
 }
 
+.difficulty-filter-bar {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 10px 12px;
+}
+
+.difficulty-filter-bar > strong {
+  color: var(--muted);
+  font-size: 0.625rem;
+  margin-right: 5px;
+}
+
+.difficulty-filter-bar button {
+  background: #f0eee7;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.difficulty-filter-bar button:hover {
+  border-color: var(--line-strong);
+}
+
+.difficulty-filter-bar button.is-active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.difficulty-filter-bar button.is-active.difficulty-0 {
+  background: #12806d;
+}
+
+.difficulty-filter-bar button.is-active.difficulty-1 {
+  background: #b57816;
+}
+
+.difficulty-filter-bar button.is-active.difficulty-2 {
+  background: #b44f43;
+}
+
 .learning-modes {
   display: grid;
   gap: 12px;
@@ -2306,7 +2380,8 @@ a {
 }
 
 @media (max-width: 1650px) {
-  .save-state {
+  .save-state,
+  .button-quiet {
     display: none;
   }
 }
@@ -2571,6 +2646,15 @@ a {
     display: none;
   }
 
+  .font-size-control output,
+  .brand-mark {
+    display: none;
+  }
+
+  .brand-block {
+    gap: 0;
+  }
+
   .button-quiet {
     display: none;
   }
@@ -2581,8 +2665,8 @@ a {
 }
 
 @media (max-width: 360px) {
-  .font-size-control output {
-    display: none;
+  .language-toggle button {
+    padding: 0 5px;
   }
 }
 
