@@ -94,6 +94,7 @@ const hubCopy = {
     heroBody: "先认题型，再做快问快答和闪卡，最后才进入完整代码。每次 10–15 分钟。",
     startLesson: "开始今日小课",
     sprint: "60 秒极速挑战",
+    openPractice: "直接练完整题",
     goalDone: "今日目标完成！",
     dailyGoal: "今日学习目标",
     keepGoing: "保持这个节奏，明天继续。",
@@ -113,6 +114,10 @@ const hubCopy = {
     cardsMode: "算法闪卡",
     cardsModeBody: "快速回忆题型、核心思路和复杂度。",
     review: "复习 →",
+    practiceDuration: "不限时 · 边做边记",
+    practiceMode: "完整题目练习",
+    practiceModeBody: "查看题意重述和官方原题链接，写代码、跑测试并同步记笔记。",
+    practice: "练习 →",
     learnByDifficulty: "按难度学习",
     allLevels: "全部",
     difficultyLabels: { 简单: "简单", 中等: "中等", 困难: "困难" } as Record<Problem["difficulty"], string>,
@@ -176,6 +181,7 @@ const hubCopy = {
     heroBody: "Recognize the pattern, answer a few quick questions, review flashcards, and only then open the full coding problem. Each session takes 10–15 minutes.",
     startLesson: "Start today’s lesson",
     sprint: "60-second Sprint",
+    openPractice: "Practice a full problem",
     goalDone: "Daily goal complete!",
     dailyGoal: "Daily learning goal",
     keepGoing: "Great pace. Come back tomorrow to keep the streak.",
@@ -195,6 +201,10 @@ const hubCopy = {
     cardsMode: "Algorithm flashcards",
     cardsModeBody: "Recall the topic, core idea, clue, and complexity.",
     review: "Review →",
+    practiceDuration: "Untimed · Code and take notes",
+    practiceMode: "Full problem practice",
+    practiceModeBody: "Read a clear paraphrase, open the official prompt, run tests, and take line notes.",
+    practice: "Practice →",
     learnByDifficulty: "Learn by difficulty",
     allLevels: "All",
     difficultyLabels: { 简单: "Easy", 中等: "Medium", 困难: "Hard" } as Record<Problem["difficulty"], string>,
@@ -593,6 +603,7 @@ export default function LearningHub({
           <div className="hero-actions">
             <button className="learn-primary" type="button" onClick={() => startLesson()}>{text.startLesson}</button>
             <button className="learn-secondary" type="button" onClick={startSprint}>{text.sprint}</button>
+            <button className="learn-secondary" type="button" onClick={() => onOpenProblem(dailyQueue[0]?.id ?? problems[0].id)}>{text.openPractice}</button>
           </div>
         </div>
         <div className="daily-goal-card">
@@ -634,6 +645,11 @@ export default function LearningHub({
           <span className="mode-icon">↻</span>
           <div><small>{text.cardsDue(dailyQueue.filter((problem) => records[problem.id]?.status === "review").length || dailyQueue.length)}</small><h2>{text.cardsMode}</h2><p>{text.cardsModeBody}</p></div>
           <b>{text.review}</b>
+        </button>
+        <button type="button" className="mode-card mode-practice" onClick={() => onOpenProblem(dailyQueue[0]?.id ?? problems[0].id)}>
+          <span className="mode-icon">{">_"}</span>
+          <div><small>{text.practiceDuration}</small><h2>{text.practiceMode}</h2><p>{text.practiceModeBody}</p></div>
+          <b>{text.practice}</b>
         </button>
       </div>
 

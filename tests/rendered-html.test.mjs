@@ -28,6 +28,8 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.match(html, /闯关小课/);
   assert.match(html, /极速抢答/);
   assert.match(html, /算法闪卡/);
+  assert.match(html, /直接练完整题/);
+  assert.match(html, /完整题目练习/);
   assert.match(html, /按难度学习/);
   assert.match(html, /Language \/ 语言/);
   assert.match(html, /调整字体大小/);
@@ -66,7 +68,10 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.match(problemSource, /id: 32, title: "最长有效括号"/);
   assert.match(pageSource, /运行测试/);
   assert.match(pageSource, /逐行解释/);
-  assert.match(pageSource, /打开力扣官方原题/);
+  assert.match(pageSource, /在力扣查看官方原题/);
+  assert.match(pageSource, /完整题目练习工作台/);
+  assert.match(pageSource, /原题 \+ 代码/);
+  assert.match(pageSource, /mobile-notes-context/);
   assert.match(pageSource, /mobile-workspace-tabs/);
   assert.match(pageSource, /wrap="off"/);
   assert.match(pwaSource, /serviceWorker\.register/);

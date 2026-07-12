@@ -61,10 +61,10 @@ const pageCopy = {
     brandSubtitle: "LeetCode Hot 100 游戏化学习",
     progress: "学习进度",
     autosave: "笔记自动保存在本机",
-    freePractice: "刷题",
+    freePractice: "原题练习",
     learningPath: "路径",
-    mobileProblemList: "题库",
-    mobileCode: "代码",
+    mobileProblemList: "选题",
+    mobileCode: "原题 + 代码",
     mobileNotes: "笔记",
     mobileWorkspace: "手机刷题导航",
     indent: "缩进",
@@ -74,7 +74,11 @@ const pageCopy = {
     increaseFont: "增大字体",
     adjustFont: "调整字体大小",
     guide: "新手怎么用",
-    libraryTitle: "Hot 100 题单",
+    practiceWorkspaceTitle: "完整题目练习工作台",
+    practiceWorkspaceBody: "左边选择题目，中间查看题意重述、示例和官方原题链接，再写代码并运行测试；右边同步记录逐行解释和复盘。",
+    practiceSteps: ["读题", "写代码", "记笔记"],
+    currentPractice: "当前练习",
+    libraryTitle: "Hot 100 练习题库",
     questionCount: (count: number) => `${count} 题`,
     search: "搜索题目",
     searchPlaceholder: "搜索题号或题名",
@@ -88,9 +92,9 @@ const pageCopy = {
     noMatch: "没有找到匹配的题目，换个关键词试试。",
     beginnerTipTitle: "先把题目说成人话",
     beginnerTipBody: "能复述输入和输出，再开始写代码。",
-    officialProblem: "打开力扣官方原题 ↗",
-    statementTitle: "题目原意",
-    statementNote: "中文重述 · 完整限制以力扣原题为准",
+    officialProblem: "在力扣查看官方原题 ↗",
+    statementTitle: "题意重述",
+    statementNote: "独立重述 · 完整原题与限制请查看力扣",
     collapseProblem: "收起题目",
     expandProblem: "展开题目",
     functionInput: "函数输入",
@@ -113,7 +117,9 @@ const pageCopy = {
     test: (index: number) => `测试 ${index}`,
     printOutput: "查看 print 输出",
     notebookLabel: "逐行解释和笔记",
-    notebookTitle: "把代码讲给自己听",
+    notebookTitle: "本题练习笔记",
+    notesForProblem: "正在记录",
+    viewProblemAndCode: "查看题目和代码",
     saved: "已自动保存",
     lineNotes: "逐行解释",
     reflection: "思路与复盘",
@@ -148,7 +154,7 @@ const pageCopy = {
       ["先完成今日小课", "先看题意卡，再认题型和核心思路，不需要立刻写代码。"],
       ["用极速挑战练反应", "在 60 秒里快速判断题型、方法和复杂度。"],
       ["用闪卡安排复习", "没记住的内容会回到复习队列，不用自己安排顺序。"],
-      ["最后进入完整代码题", "这时再写代码、运行测试并解释每一行，压力会小很多。"],
+      ["最后进入原题练习", "在同一个界面读题、写代码、运行测试并解释每一行，压力会小很多。"],
     ],
     goToPath: "去学习路径",
   },
@@ -157,10 +163,10 @@ const pageCopy = {
     brandSubtitle: "LeetCode Hot 100 Game-Based Learning",
     progress: "Progress",
     autosave: "Notes save automatically on this device",
-    freePractice: "Practice",
+    freePractice: "Problem Practice",
     learningPath: "Path",
-    mobileProblemList: "Problems",
-    mobileCode: "Code",
+    mobileProblemList: "Choose",
+    mobileCode: "Prompt + Code",
     mobileNotes: "Notes",
     mobileWorkspace: "Mobile practice navigation",
     indent: "Indent",
@@ -170,7 +176,11 @@ const pageCopy = {
     increaseFont: "Increase text size",
     adjustFont: "Adjust text size",
     guide: "How it works",
-    libraryTitle: "Hot 100 Problem Set",
+    practiceWorkspaceTitle: "Full Problem Practice Workspace",
+    practiceWorkspaceBody: "Choose a problem, read an independent paraphrase and open the official prompt, then write and test code while keeping line notes and reflections.",
+    practiceSteps: ["Read", "Code", "Take notes"],
+    currentPractice: "Current problem",
+    libraryTitle: "Hot 100 Practice Set",
     questionCount: (count: number) => `${count} problems`,
     search: "Search problems",
     searchPlaceholder: "Search by number or title",
@@ -184,9 +194,9 @@ const pageCopy = {
     noMatch: "No matching problems. Try another search.",
     beginnerTipTitle: "Say the problem in plain language",
     beginnerTipBody: "Explain the input and output before writing code.",
-    officialProblem: "Open the official problem ↗",
-    statementTitle: "Problem in plain English",
-    statementNote: "Original paraphrase · See LeetCode for full numeric limits",
+    officialProblem: "View the official problem on LeetCode ↗",
+    statementTitle: "Problem paraphrase",
+    statementNote: "Independent paraphrase · View the official statement and full constraints on LeetCode",
     collapseProblem: "Collapse",
     expandProblem: "Expand",
     functionInput: "Function input",
@@ -209,7 +219,9 @@ const pageCopy = {
     test: (index: number) => `Test ${index}`,
     printOutput: "View print output",
     notebookLabel: "Line explanations and notes",
-    notebookTitle: "Explain the code to yourself",
+    notebookTitle: "Practice notes",
+    notesForProblem: "Taking notes for",
+    viewProblemAndCode: "View prompt & code",
     saved: "Saved",
     lineNotes: "Line by line",
     reflection: "Plan & review",
@@ -244,7 +256,7 @@ const pageCopy = {
       ["Finish the daily lesson", "Read the prompt card, then identify the pattern and core idea before coding."],
       ["Build speed in Sprint", "Use 60-second rounds to recognize topics, methods, and complexity."],
       ["Review with flashcards", "Anything you forget returns to the review queue automatically."],
-      ["Finish with a full coding problem", "Write code, run tests, and explain each line after the idea feels familiar."],
+      ["Finish with problem practice", "Read the prompt, write code, run tests, and explain each line in one workspace."],
     ],
     goToPath: "Go to learning path",
   },
@@ -531,6 +543,7 @@ export default function Home() {
     chooseProblem(id);
     setAppMode("workspace");
     setMobileWorkspaceTab("code");
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
   function chooseProblem(id: number) {
@@ -828,6 +841,21 @@ export default function Home() {
         />
       ) : (
         <div className="workspace">
+        <section className="practice-workspace-header" aria-labelledby="practice-workspace-title">
+          <div className="practice-workspace-copy">
+            <div className="section-kicker">FULL PROBLEM PRACTICE</div>
+            <h1 id="practice-workspace-title">{copy.practiceWorkspaceTitle}</h1>
+            <p>{copy.practiceWorkspaceBody}</p>
+          </div>
+          <ol className="practice-workflow" aria-label={copy.practiceWorkspaceTitle}>
+            {copy.practiceSteps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}
+          </ol>
+          <div className="practice-current">
+            <span>{copy.currentPractice}</span>
+            <strong>{currentProblem.id}. {currentProblem.title}</strong>
+            <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>
+          </div>
+        </section>
         <nav className="mobile-workspace-tabs" role="tablist" aria-label={copy.mobileWorkspace}>
           <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("library")}>
             <span aria-hidden="true">☷</span>{copy.mobileProblemList}
@@ -1043,6 +1071,7 @@ export default function Home() {
             <div>
               <div className="section-kicker">MY NOTEBOOK</div>
               <h2>{copy.notebookTitle}</h2>
+              <span className="notes-problem-label">{copy.notesForProblem} <strong>{currentProblem.id}. {currentProblem.title}</strong></span>
             </div>
             <span className="autosave-badge">{copy.saved}</span>
           </div>
@@ -1050,6 +1079,14 @@ export default function Home() {
           <div className="note-tabs" role="tablist" aria-label={copy.notebookLabel}>
             <button type="button" role="tab" aria-selected={noteTab === "line"} className={noteTab === "line" ? "is-active" : ""} onClick={() => setNoteTab("line")}>{copy.lineNotes}</button>
             <button type="button" role="tab" aria-selected={noteTab === "review"} className={noteTab === "review" ? "is-active" : ""} onClick={() => setNoteTab("review")}>{copy.reflection}</button>
+          </div>
+
+          <div className="mobile-notes-context">
+            <div>
+              <strong>{currentProblem.id}. {currentProblem.title}</strong>
+              <span>{copy.difficultyLabels[currentProblem.difficulty]} · {currentProblem.topic}</span>
+            </div>
+            <button type="button" onClick={() => setMobileWorkspaceTab("code")}>{copy.viewProblemAndCode}</button>
           </div>
 
           {noteTab === "line" ? (
