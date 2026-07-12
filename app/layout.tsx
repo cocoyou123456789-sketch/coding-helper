@@ -2,8 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 const siteUrl = "https://cocoyou123456789-sketch.github.io/coding-helper";
+const isNativeApp = process.env.NEXT_PUBLIC_NATIVE_APP === "true";
 
-export const metadata: Metadata = {
+const webMetadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "题解簿｜LeetCode Hot 100 小白学习工作台",
   description: "浅粉色算法学习手账：选难度、学题型、写代码、运行测试并记录逐行笔记。",
@@ -48,6 +49,21 @@ export const metadata: Metadata = {
     images: [`${siteUrl}/og.png`],
   },
 };
+
+const nativeMetadata: Metadata = {
+  title: "题解簿｜算法学习手账",
+  description: "在设备本地选难度、学题型、写 Python、运行测试并记录逐行笔记。",
+  applicationName: "题解簿",
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const metadata: Metadata = isNativeApp ? nativeMetadata : webMetadata;
 
 export const viewport: Viewport = {
   width: "device-width",

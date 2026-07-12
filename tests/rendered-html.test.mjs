@@ -88,7 +88,7 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.equal(manifest.background_color, "#fff7f9");
   assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
-  assert.match(serviceWorkerSource, /2026-07-12-pink/);
+  assert.match(serviceWorkerSource, /2026-07-12-ios-v1/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));

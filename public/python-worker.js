@@ -2,7 +2,10 @@
 
 // Pyodide is pinned so a lesson cannot change behavior after a CDN release.
 const PYODIDE_VERSION = "0.28.3";
-const PYODIDE_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const IS_NATIVE_APP = self.location.protocol === "capacitor:";
+const PYODIDE_INDEX_URL = IS_NATIVE_APP
+  ? new URL("./pyodide/", self.location.href).href
+  : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 const PYTHON_PRELUDE = String.raw`
 import io
@@ -34,7 +37,7 @@ class TreeNode:
 
 
 class Node:
-    """A permissive LeetCode node for graphs, random lists, and N-ary trees."""
+    """A permissive judge-compatible node for graphs, random lists, and N-ary trees."""
 
     def __init__(
         self,
@@ -191,7 +194,7 @@ def mutate_first(function, first, *args, **kwargs):
 
 
 def mutated(first, function, *args, **kwargs):
-    """Run an in-place LeetCode function and return its mutated input."""
+    """Run an in-place exercise function and return its mutated input."""
     function(first, *args, **kwargs)
     return first
 
@@ -577,6 +580,17 @@ function serializeError(error) {
   };
 }
 
+function lockNativeRuntimeNetwork() {
+  if (!IS_NATIVE_APP) return;
+  const blocked = () => Promise.reject(new TypeError("Network access is disabled inside the offline Python runner."));
+  self.fetch = blocked;
+  self.XMLHttpRequest = undefined;
+  self.WebSocket = undefined;
+  self.importScripts = () => {
+    throw new TypeError("Loading additional scripts is disabled inside the offline Python runner.");
+  };
+}
+
 async function loadRuntime() {
   if (runtimePromise) return runtimePromise;
 
@@ -589,6 +603,7 @@ async function loadRuntime() {
   runtimePromise = (async () => {
     importScripts(`${PYODIDE_INDEX_URL}pyodide.js`);
     const runtime = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+    lockNativeRuntimeNetwork();
     postStatus("ready", {
       phase: "runtime",
       message: "Python 运行环境已就绪",

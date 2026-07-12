@@ -2,6 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import LearningHub, { type LearningProfile } from "./learning-hub";
+import {
+  clearStoredStudyData,
+  configureNativeAppearance,
+  getStoredValue,
+  isNativeAppBuild,
+  loadDailyReminder,
+  openExternalPage,
+  playSelectionHaptic,
+  playTestHaptic,
+  saveDailyReminder,
+  setStoredValue,
+  shareStudyNote,
+  type DailyReminder,
+  type ReminderSaveResult,
+} from "./native-app";
 import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
 import PwaInstaller from "./pwa-installer";
@@ -42,6 +57,9 @@ const STORAGE_KEY = "leetcode-hot100-study-notebook-v1";
 const FONT_SIZE_KEY = "leetcode-hot100-font-size-v1";
 const PROFILE_KEY = "leetcode-hot100-learning-profile-v1";
 const LANGUAGE_KEY = "leetcode-hot100-language-v1";
+const PRIVACY_URL = "https://cocoyou123456789-sketch.github.io/coding-helper/privacy/";
+const SUPPORT_URL = "https://cocoyou123456789-sketch.github.io/coding-helper/support/";
+const LICENSES_URL = "https://cocoyou123456789-sketch.github.io/coding-helper/licenses/";
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 24;
 const DEFAULT_FONT_SIZE = 18;
@@ -59,8 +77,10 @@ const pageCopy = {
   zh: {
     brandName: "题解簿",
     brandSubtitle: "LeetCode Hot 100 学习手账",
+    nativeBrandSubtitle: "100 道经典算法题学习手账",
     progress: "学习进度",
     autosave: "笔记自动保存在本机",
+    nativeAutosave: "代码和笔记已保存在这台设备",
     freePractice: "完整题练习",
     learningPath: "学习首页",
     appNavigation: "主要页面",
@@ -80,6 +100,7 @@ const pageCopy = {
     practiceSteps: ["读题", "写代码", "记笔记"],
     currentPractice: "当前练习",
     libraryTitle: "Hot 100 练习题库",
+    nativeLibraryTitle: "经典算法练习题库",
     questionCount: (count: number) => `${count} 题`,
     search: "搜索题目",
     searchPlaceholder: "搜索题号或题名",
@@ -96,6 +117,7 @@ const pageCopy = {
     officialProblem: "在力扣查看官方原题 ↗",
     statementTitle: "题意重述",
     statementNote: "独立重述 · 完整原题与限制请查看力扣",
+    nativeStatementNote: "独立改写 · 题目、示例和测试已离线收录",
     collapseProblem: "收起题目",
     expandProblem: "展开题目",
     functionInput: "函数输入",
@@ -111,6 +133,7 @@ const pageCopy = {
     editorLabel: "Python 代码编辑器",
     quickTest: "快速测试",
     testHelp: "检查示例是否通过；最终结果仍以力扣提交为准。",
+    nativeTestHelp: "先用本机快速测试检查思路，再继续补充边界情况。",
     input: "输入",
     expected: "预期",
     actual: "实际",
@@ -159,12 +182,39 @@ const pageCopy = {
       ["写下复盘", "解释关键代码和错误原因，下次更容易认出来。"],
     ],
     goToPath: "去学习路径",
+    studyReminder: "学习提醒",
+    nativeSettingsTitle: "我的学习提醒",
+    nativeSettingsBody: "选择一个适合你的时间。提醒由手机本地发送，不需要注册账号。",
+    reminderEnabled: "每天提醒我学习",
+    reminderTime: "提醒时间",
+    reminderOffline: "Python 运行环境已随 App 安装，断网也可以写代码和运行测试。",
+    saveReminder: "保存设置",
+    savingReminder: "正在保存…",
+    closeSettings: "关闭",
+    reminderScheduled: "已设置每天的学习提醒。",
+    reminderDisabled: "已关闭学习提醒。",
+    reminderDenied: "通知权限没有开启，可以稍后在 iPhone 设置中允许通知。",
+    reminderUnsupported: "当前环境不支持手机提醒。",
+    reminderError: "提醒暂时没有保存成功，请稍后重试。",
+    shareNotes: "分享笔记",
+    shareSuccess: "已打开分享菜单。",
+    shareCopied: "笔记已复制。",
+    shareUnavailable: "当前设备暂时无法分享。",
+    shareTitle: "题解簿学习笔记",
+    privacyPolicy: "隐私政策",
+    support: "帮助与联系",
+    licenses: "开源许可",
+    deleteData: "删除本机学习数据",
+    deleteConfirm: "确定删除这台设备上的全部代码、笔记、进度和提醒吗？这个操作无法撤销。",
+    deleteDone: "本机学习数据已删除。",
   },
   en: {
     brandName: "AlgoQuest",
     brandSubtitle: "LeetCode Hot 100 Study Notebook",
+    nativeBrandSubtitle: "A study notebook for 100 classic algorithm problems",
     progress: "Progress",
     autosave: "Notes save automatically on this device",
+    nativeAutosave: "Code and notes are saved on this device",
     freePractice: "Full Practice",
     learningPath: "Study Home",
     appNavigation: "Main pages",
@@ -184,6 +234,7 @@ const pageCopy = {
     practiceSteps: ["Read", "Code", "Take notes"],
     currentPractice: "Current problem",
     libraryTitle: "Hot 100 Practice Set",
+    nativeLibraryTitle: "Classic Algorithm Practice Set",
     questionCount: (count: number) => `${count} problems`,
     search: "Search problems",
     searchPlaceholder: "Search by number or title",
@@ -200,6 +251,7 @@ const pageCopy = {
     officialProblem: "View the official problem on LeetCode ↗",
     statementTitle: "Problem paraphrase",
     statementNote: "Independent paraphrase · View the official statement and full constraints on LeetCode",
+    nativeStatementNote: "Independent rewrite · prompts, examples, and tests are available offline",
     collapseProblem: "Collapse",
     expandProblem: "Expand",
     functionInput: "Function input",
@@ -215,6 +267,7 @@ const pageCopy = {
     editorLabel: "Python code editor",
     quickTest: "Quick tests",
     testHelp: "Check the examples here; LeetCode remains the final judge.",
+    nativeTestHelp: "Use the on-device quick tests first, then add more edge cases to your reasoning.",
     input: "Input",
     expected: "Expected",
     actual: "Actual",
@@ -263,6 +316,31 @@ const pageCopy = {
       ["Write a review", "Explain key lines and mistakes so the pattern is easier next time."],
     ],
     goToPath: "Go to learning path",
+    studyReminder: "Study reminder",
+    nativeSettingsTitle: "My study reminder",
+    nativeSettingsBody: "Pick a time that works for you. The reminder is scheduled locally on this device; no account is required.",
+    reminderEnabled: "Remind me every day",
+    reminderTime: "Reminder time",
+    reminderOffline: "Python is bundled with the app, so you can write code and run tests offline.",
+    saveReminder: "Save settings",
+    savingReminder: "Saving…",
+    closeSettings: "Close",
+    reminderScheduled: "Your daily study reminder is set.",
+    reminderDisabled: "Your study reminder is off.",
+    reminderDenied: "Notifications are not allowed. You can enable them later in iPhone Settings.",
+    reminderUnsupported: "Study reminders are not supported in this environment.",
+    reminderError: "The reminder could not be saved. Please try again.",
+    shareNotes: "Share notes",
+    shareSuccess: "The share sheet is open.",
+    shareCopied: "Notes copied.",
+    shareUnavailable: "Sharing is not available on this device.",
+    shareTitle: "Algo notebook study note",
+    privacyPolicy: "Privacy policy",
+    support: "Help & support",
+    licenses: "Open-source licenses",
+    deleteData: "Delete on-device study data",
+    deleteConfirm: "Delete all code, notes, progress, and reminders stored on this device? This cannot be undone.",
+    deleteDone: "On-device study data deleted.",
   },
 } as const;
 
@@ -353,6 +431,7 @@ function yesterdayKey(): string {
 }
 
 export default function Home() {
+  const nativeApp = isNativeAppBuild();
   const [selectedId, setSelectedId] = useState(problems[0].id);
   const [records, setRecords] = useState<StudyRecords>({});
   const [language, setLanguage] = useState<Language>("zh");
@@ -368,6 +447,11 @@ export default function Home() {
   const [appMode, setAppMode] = useState<"path" | "workspace">("path");
   const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<"library" | "code" | "notes">("library");
   const [profile, setProfile] = useState<LearningProfile>(EMPTY_PROFILE);
+  const [showNativeSettings, setShowNativeSettings] = useState(false);
+  const [dailyReminder, setDailyReminder] = useState<DailyReminder>({ enabled: false, time: "20:00" });
+  const [reminderSaving, setReminderSaving] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
   const workerRef = useRef<Worker | null>(null);
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -375,6 +459,11 @@ export default function Home() {
   const lineNumbersRef = useRef<HTMLDivElement | null>(null);
 
   const copy = pageCopy[language];
+  const brandSubtitle = nativeApp ? copy.nativeBrandSubtitle : copy.brandSubtitle;
+  const autosaveLabel = nativeApp ? copy.nativeAutosave : copy.autosave;
+  const libraryTitle = nativeApp ? copy.nativeLibraryTitle : copy.libraryTitle;
+  const statementNote = nativeApp ? copy.nativeStatementNote : copy.statementNote;
+  const testHelp = nativeApp ? copy.nativeTestHelp : copy.testHelp;
   const displayProblems = useMemo(
     () => problems.map((problem) => localizeProblem(problem, language)),
     [language],
@@ -416,9 +505,20 @@ export default function Home() {
   const progress = Math.round((solvedCount / displayProblems.length) * 100);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    let cancelled = false;
+
+    async function loadSavedStudy() {
       try {
-        const savedLanguage = window.localStorage.getItem(LANGUAGE_KEY);
+        await configureNativeAppearance();
+        const [savedLanguage, saved, savedFontSizeValue, savedProfile, savedReminder] = await Promise.all([
+          getStoredValue(LANGUAGE_KEY),
+          getStoredValue(STORAGE_KEY),
+          getStoredValue(FONT_SIZE_KEY),
+          getStoredValue(PROFILE_KEY),
+          loadDailyReminder(),
+        ]);
+        if (cancelled) return;
+
         if (savedLanguage === "zh" || savedLanguage === "en") {
           setLanguage(savedLanguage);
           setRunState({ phase: "idle", message: pageCopy[savedLanguage].notRun, results: [] });
@@ -428,7 +528,6 @@ export default function Home() {
           setAppMode(requestedMode);
           if (requestedMode === "workspace") setMobileWorkspaceTab("library");
         }
-        const saved = window.localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved) as { records?: StudyRecords; selectedId?: number };
           if (parsed.records) setRecords(parsed.records);
@@ -436,11 +535,10 @@ export default function Home() {
             setSelectedId(parsed.selectedId);
           }
         }
-        const savedFontSize = Number(window.localStorage.getItem(FONT_SIZE_KEY));
+        const savedFontSize = Number(savedFontSizeValue);
         if (Number.isInteger(savedFontSize) && savedFontSize >= MIN_FONT_SIZE && savedFontSize <= MAX_FONT_SIZE) {
           setFontSize(savedFontSize);
         }
-        const savedProfile = window.localStorage.getItem(PROFILE_KEY);
         if (savedProfile) {
           const loaded = { ...EMPTY_PROFILE, ...JSON.parse(savedProfile) } as LearningProfile;
           if (loaded.todayDate !== localDateKey()) {
@@ -449,19 +547,24 @@ export default function Home() {
           }
           setProfile(loaded);
         }
+        setDailyReminder(savedReminder);
       } catch {
         // A damaged local note should not stop the site from opening.
       } finally {
-        setHydrated(true);
+        if (!cancelled) setHydrated(true);
       }
-    }, 0);
-    return () => window.clearTimeout(timer);
+    }
+
+    void loadSavedStudy();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     const timer = window.setTimeout(() => {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ records, selectedId }));
+      void setStoredValue(STORAGE_KEY, JSON.stringify({ records, selectedId }));
     }, 250);
     return () => window.clearTimeout(timer);
   }, [hydrated, records, selectedId]);
@@ -469,22 +572,22 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
     if (!hydrated) return;
-    window.localStorage.setItem(FONT_SIZE_KEY, String(fontSize));
+    void setStoredValue(FONT_SIZE_KEY, String(fontSize));
   }, [fontSize, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    void setStoredValue(PROFILE_KEY, JSON.stringify(profile));
   }, [hydrated, profile]);
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
-    document.title = language === "zh"
-      ? "题解簿｜LeetCode Hot 100 小白学习工作台"
-      : "AlgoQuest | LeetCode Hot 100 Learning Path";
+    document.title = nativeApp
+      ? (language === "zh" ? "题解簿｜算法学习手账" : "AlgoQuest | Algorithm Study Notebook")
+      : (language === "zh" ? "题解簿｜LeetCode Hot 100 小白学习工作台" : "AlgoQuest | LeetCode Hot 100 Learning Path");
     if (!hydrated) return;
-    window.localStorage.setItem(LANGUAGE_KEY, language);
-  }, [hydrated, language]);
+    void setStoredValue(LANGUAGE_KEY, language);
+  }, [hydrated, language, nativeApp]);
 
   useEffect(() => {
     return () => {
@@ -554,6 +657,7 @@ export default function Home() {
   }
 
   function chooseProblem(id: number) {
+    void playSelectionHaptic();
     setSelectedId(id);
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setNoteTab("line");
@@ -562,17 +666,87 @@ export default function Home() {
   }
 
   function showAppMode(nextMode: "path" | "workspace") {
+    void playSelectionHaptic();
     setAppMode(nextMode);
     if (nextMode === "workspace" && appMode !== "workspace") setMobileWorkspaceTab("library");
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
   function selectLanguage(nextLanguage: Language) {
+    void playSelectionHaptic();
     setLanguage(nextLanguage);
     setTopic("all");
     setRunState((previous) => previous.phase === "running"
       ? previous
       : { phase: "idle", message: pageCopy[nextLanguage].notRun, results: [] });
+  }
+
+  function reminderResultMessage(result: ReminderSaveResult): string {
+    const messages: Record<ReminderSaveResult, string> = {
+      scheduled: copy.reminderScheduled,
+      disabled: copy.reminderDisabled,
+      denied: copy.reminderDenied,
+      unsupported: copy.reminderUnsupported,
+      error: copy.reminderError,
+    };
+    return messages[result];
+  }
+
+  async function handleSaveReminder() {
+    setReminderSaving(true);
+    setReminderMessage("");
+    const result = await saveDailyReminder(dailyReminder, language);
+    if (result === "denied") setDailyReminder((current) => ({ ...current, enabled: false }));
+    setReminderMessage(reminderResultMessage(result));
+    setReminderSaving(false);
+    if (result === "scheduled" || result === "disabled") void playTestHaptic(true);
+  }
+
+  function studyNoteForSharing(): string {
+    const lineNotes = codeLines
+      .map((line, index) => {
+        const note = currentRecord.lineNotes[index]?.trim();
+        return note ? `${index + 1}. ${line || copy.blankLine}\n   ${note}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    const headings = language === "zh"
+      ? { code: "我的代码", lines: "逐行解释", thinking: "解题思路", mistakes: "卡住或写错", review: "下次识别信号" }
+      : { code: "My code", lines: "Line explanations", thinking: "Approach", mistakes: "Mistakes", review: "Pattern to recognize" };
+
+    return [
+      `${currentProblem.id}. ${currentProblem.title}`,
+      `${copy.difficultyLabels[currentProblem.difficulty]} · ${currentProblem.topic}`,
+      `\n${headings.code}\n\n${currentRecord.code}`,
+      lineNotes ? `\n${headings.lines}\n\n${lineNotes}` : "",
+      currentRecord.thinking.trim() ? `\n${headings.thinking}\n\n${currentRecord.thinking.trim()}` : "",
+      currentRecord.mistakes.trim() ? `\n${headings.mistakes}\n\n${currentRecord.mistakes.trim()}` : "",
+      currentRecord.review.trim() ? `\n${headings.review}\n\n${currentRecord.review.trim()}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  async function handleShareNotes() {
+    setShareMessage("");
+    const result = await shareStudyNote(
+      `${copy.shareTitle} · ${currentProblem.id}. ${currentProblem.title}`,
+      studyNoteForSharing(),
+    );
+    setShareMessage(result === "shared" ? copy.shareSuccess : result === "copied" ? copy.shareCopied : copy.shareUnavailable);
+  }
+
+  async function handleDeleteStudyData() {
+    if (!window.confirm(copy.deleteConfirm)) return;
+    await clearStoredStudyData([STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY]);
+    setRecords({});
+    setSelectedId(problems[0].id);
+    setProfile(EMPTY_PROFILE);
+    setFontSize(DEFAULT_FONT_SIZE);
+    setLanguage("zh");
+    setDailyReminder({ enabled: false, time: "20:00" });
+    setRunState({ phase: "idle", message: pageCopy.zh.notRun, results: [] });
+    setAppMode("path");
+    setReminderMessage(pageCopy.zh.deleteDone);
+    void playTestHaptic(true);
   }
 
   function updateLineNote(index: number, value: string) {
@@ -700,6 +874,7 @@ export default function Home() {
       if (data.type === "result") {
         const results = (data.results ?? []) as WorkerTestResult[];
         const allPassed = results.length > 0 && results.every((result) => result.passed);
+        void playTestHaptic(allPassed);
         setRunState({
           phase: "done",
           message: allPassed ? copy.allPassed : copy.someFailed,
@@ -762,13 +937,13 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${nativeApp ? "is-native-app" : ""}`}>
       <header className="site-header">
         <div className="brand-block">
           <span className="brand-mark" aria-hidden="true">{"{ }"}</span>
           <div>
             <strong>{copy.brandName}</strong>
-            <span>{copy.brandSubtitle}</span>
+            <span>{brandSubtitle}</span>
           </div>
         </div>
 
@@ -782,7 +957,7 @@ export default function Home() {
         </div>
 
         <div className="header-actions">
-          <span className="save-state"><i />{copy.autosave}</span>
+          <span className="save-state"><i />{autosaveLabel}</span>
           <nav className="app-mode-nav" aria-label={copy.appNavigation}>
             <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
             <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
@@ -792,6 +967,11 @@ export default function Home() {
             <button type="button" lang="en" className={language === "en" ? "is-active" : ""} onClick={() => selectLanguage("en")}>EN</button>
           </div>
           <PwaInstaller language={language} />
+          {nativeApp && (
+            <button className="button native-tools-trigger" type="button" onClick={() => { setReminderMessage(""); setShowNativeSettings(true); }}>
+              <span aria-hidden="true">◷</span>{copy.studyReminder}
+            </button>
+          )}
           <div className="font-size-control" aria-label={copy.adjustFont}>
             <span>{copy.fontSize}</span>
             <button
@@ -854,7 +1034,7 @@ export default function Home() {
           <div className="practice-current">
             <span>{copy.currentPractice}</span>
             <strong>{currentProblem.id}. {currentProblem.title}</strong>
-            <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>
+            {!nativeApp && <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>}
           </div>
         </section>
         <nav className="mobile-workspace-tabs" role="tablist" aria-label={copy.mobileWorkspace}>
@@ -868,11 +1048,11 @@ export default function Home() {
             <span aria-hidden="true">✎</span>{copy.mobileNotes}
           </button>
         </nav>
-        <aside id="mobile-library-panel" role="tabpanel" className={`panel library-panel mobile-workspace-pane ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`} aria-label={copy.libraryTitle}>
+        <aside id="mobile-library-panel" role="tabpanel" className={`panel library-panel mobile-workspace-pane ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`} aria-label={libraryTitle}>
           <div className="library-head">
             <div className="section-kicker">LEARNING MAP</div>
             <div className="library-title-row">
-              <h1>{copy.libraryTitle}</h1>
+              <h1>{libraryTitle}</h1>
               <span>{copy.questionCount(filteredProblems.length)}</span>
             </div>
             <label className="search-field">
@@ -900,7 +1080,7 @@ export default function Home() {
             </div>
           </div>
 
-          <nav className="problem-list" aria-label={copy.libraryTitle}>
+          <nav className="problem-list" aria-label={libraryTitle}>
             {filteredProblems.length ? filteredProblems.map((problem) => {
               const record = records[problem.id];
               const status = record?.status ?? "todo";
@@ -937,8 +1117,8 @@ export default function Home() {
         <section id="mobile-code-panel" role="tabpanel" className={`panel focus-panel mobile-workspace-pane ${mobileWorkspaceTab === "code" ? "is-mobile-active" : ""}`} aria-label={`${currentProblem.title} · Python`}>
           <article className="problem-brief">
             <div className="brief-topline">
-              <span>HOT 100 / {currentProblem.topic}</span>
-              <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>
+              <span>{nativeApp ? "ALGORITHM 100" : "HOT 100"} / {currentProblem.topic}</span>
+              {!nativeApp && <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>}
             </div>
             <div className="brief-title-row">
               <h2>{currentProblem.id}. {currentProblem.title}</h2>
@@ -951,7 +1131,7 @@ export default function Home() {
               <div className="statement-head">
                 <div>
                   <strong>{copy.statementTitle}</strong>
-                  <small>{copy.statementNote}</small>
+                  <small>{statementNote}</small>
                 </div>
                 <button
                   type="button"
@@ -1035,7 +1215,7 @@ export default function Home() {
             <div className="console-head">
               <div>
                 <strong>{copy.quickTest}</strong>
-                <span id="editor-help">{copy.testHelp}</span>
+                <span id="editor-help">{testHelp}</span>
               </div>
               <div className="console-status">
                 {runState.phase === "running" && <i className="spinner" />}
@@ -1080,8 +1260,12 @@ export default function Home() {
               <h2>{copy.notebookTitle}</h2>
               <span className="notes-problem-label">{copy.notesForProblem} <strong>{currentProblem.id}. {currentProblem.title}</strong></span>
             </div>
-            <span className="autosave-badge">{copy.saved}</span>
+            <div className="notes-head-actions">
+              {nativeApp && <button type="button" className="share-note-button" onClick={handleShareNotes}><span aria-hidden="true">↗</span>{copy.shareNotes}</button>}
+              <span className="autosave-badge">{copy.saved}</span>
+            </div>
           </div>
+          {shareMessage && <p className="native-action-message" role="status">{shareMessage}</p>}
 
           <div className="note-tabs" role="tablist" aria-label={copy.notebookLabel}>
             <button type="button" role="tab" aria-selected={noteTab === "line"} className={noteTab === "line" ? "is-active" : ""} onClick={() => setNoteTab("line")}>{copy.lineNotes}</button>
@@ -1153,6 +1337,51 @@ export default function Home() {
             </div>
           </div>
         </aside>
+        </div>
+      )}
+
+      {nativeApp && showNativeSettings && (
+        <div className="native-settings-backdrop" role="presentation" onMouseDown={() => setShowNativeSettings(false)}>
+          <section className="native-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="native-settings-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="native-settings-handle" aria-hidden="true" />
+            <button className="guide-close" type="button" aria-label={copy.closeSettings} onClick={() => setShowNativeSettings(false)}>×</button>
+            <div className="section-kicker">ON-DEVICE STUDY</div>
+            <h2 id="native-settings-title">{copy.nativeSettingsTitle}</h2>
+            <p>{copy.nativeSettingsBody}</p>
+
+            <label className="native-reminder-toggle">
+              <span><strong>{copy.reminderEnabled}</strong><small>{dailyReminder.enabled ? dailyReminder.time : "—"}</small></span>
+              <input
+                type="checkbox"
+                checked={dailyReminder.enabled}
+                onChange={(event) => { setReminderMessage(""); setDailyReminder((current) => ({ ...current, enabled: event.target.checked })); }}
+              />
+            </label>
+
+            <label className="native-reminder-time">
+              <span>{copy.reminderTime}</span>
+              <input
+                type="time"
+                value={dailyReminder.time}
+                disabled={!dailyReminder.enabled}
+                onChange={(event) => setDailyReminder((current) => ({ ...current, time: event.target.value }))}
+              />
+            </label>
+
+            <div className="native-offline-note"><span aria-hidden="true">✓</span><p>{copy.reminderOffline}</p></div>
+            {reminderMessage && <p className="native-settings-message" role="status">{reminderMessage}</p>}
+
+            <button className="button button-primary native-reminder-save" type="button" onClick={handleSaveReminder} disabled={reminderSaving}>
+              {reminderSaving ? copy.savingReminder : copy.saveReminder}
+            </button>
+
+            <div className="native-settings-links">
+              <button type="button" onClick={() => void openExternalPage(PRIVACY_URL)}>{copy.privacyPolicy}<span aria-hidden="true">↗</span></button>
+              <button type="button" onClick={() => void openExternalPage(SUPPORT_URL)}>{copy.support}<span aria-hidden="true">↗</span></button>
+              <button type="button" onClick={() => void openExternalPage(LICENSES_URL)}>{copy.licenses}<span aria-hidden="true">↗</span></button>
+            </div>
+            <button className="native-delete-data" type="button" onClick={handleDeleteStudyData}>{copy.deleteData}</button>
+          </section>
         </div>
       )}
 

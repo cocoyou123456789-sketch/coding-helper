@@ -55,6 +55,7 @@ function isStandaloneMode() {
 }
 
 export default function PwaInstaller({ language }: { language: Language }) {
+  const nativeBuild = process.env.NEXT_PUBLIC_NATIVE_APP === "true";
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showButton, setShowButton] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -63,6 +64,8 @@ export default function PwaInstaller({ language }: { language: Language }) {
   const copy = installCopy[language];
 
   useEffect(() => {
+    if (nativeBuild) return;
+
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const userAgent = window.navigator.userAgent;
     const iosDevice = /iPad|iPhone|iPod/.test(userAgent)
@@ -120,7 +123,7 @@ export default function PwaInstaller({ language }: { language: Language }) {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("load", registerWorker);
     };
-  }, []);
+  }, [nativeBuild]);
 
   async function installApp() {
     if (!installPrompt) {
@@ -133,6 +136,8 @@ export default function PwaInstaller({ language }: { language: Language }) {
     setInstallPrompt(null);
     if (choice.outcome === "accepted") setShowButton(false);
   }
+
+  if (nativeBuild) return null;
 
   return (
     <>

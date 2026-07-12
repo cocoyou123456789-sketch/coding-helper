@@ -1355,6 +1355,41 @@ a {
   padding: 5px 7px;
 }
 
+.notes-head-actions {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+
+.share-note-button,
+.native-tools-trigger {
+  align-items: center;
+  background: #fff1f5;
+  border: 1px solid #e8bdca;
+  border-radius: 10px;
+  color: var(--teal-dark);
+  display: inline-flex;
+  font-size: 0.625rem;
+  font-weight: 800;
+  gap: 5px;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.share-note-button:hover,
+.native-tools-trigger:hover {
+  background: var(--teal-soft);
+}
+
+.native-action-message {
+  background: #fff1f5;
+  border-bottom: 1px solid var(--line);
+  color: var(--teal-dark);
+  font-size: 0.5625rem;
+  margin: 0;
+  padding: 7px 17px;
+}
+
 .note-tabs {
   border-bottom: 1px solid var(--line);
   display: grid;
@@ -2709,6 +2744,226 @@ a {
   width: 32px;
 }
 
+/* Native iOS study tools */
+.is-native-app {
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+}
+
+.is-native-app .site-header {
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+
+.native-settings-backdrop {
+  align-items: center;
+  background: rgba(55, 31, 42, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  position: fixed;
+  z-index: 90;
+}
+
+.native-settings-dialog {
+  background:
+    linear-gradient(90deg, transparent 0 28px, rgba(198, 77, 114, 0.09) 28px 30px, transparent 30px),
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(198, 77, 114, 0.035) 31px 32px),
+    var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  box-shadow: 0 28px 90px rgba(63, 30, 44, 0.32);
+  max-height: calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-width: 480px;
+  overflow-y: auto;
+  padding: 28px;
+  position: relative;
+  width: 100%;
+}
+
+.native-settings-handle {
+  background: var(--line-strong);
+  border-radius: 999px;
+  display: none;
+  height: 5px;
+  margin: -11px auto 16px;
+  width: 46px;
+}
+
+.native-settings-dialog h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.045em;
+  margin: 5px 42px 7px 0;
+}
+
+.native-settings-dialog > p {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  margin: 0 0 18px;
+}
+
+.native-reminder-toggle,
+.native-reminder-time {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  min-height: 58px;
+  padding: 9px 12px;
+}
+
+.native-reminder-toggle span,
+.native-reminder-toggle strong,
+.native-reminder-toggle small {
+  display: block;
+}
+
+.native-reminder-toggle strong,
+.native-reminder-time > span {
+  font-size: 0.6875rem;
+}
+
+.native-reminder-toggle small {
+  color: var(--muted);
+  font-size: 0.5625rem;
+  margin-top: 3px;
+}
+
+.native-reminder-toggle input {
+  appearance: none;
+  background: #dccbd1;
+  border: 0;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 31px;
+  margin: 0;
+  padding: 3px;
+  transition: background 180ms ease;
+  width: 52px;
+}
+
+.native-reminder-toggle input::before {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(69, 37, 50, 0.22);
+  content: "";
+  display: block;
+  height: 25px;
+  transition: transform 180ms ease;
+  width: 25px;
+}
+
+.native-reminder-toggle input:checked {
+  background: var(--teal);
+}
+
+.native-reminder-toggle input:checked::before {
+  transform: translateX(21px);
+}
+
+.native-reminder-time input {
+  background: var(--teal-soft);
+  border: 0;
+  border-radius: 10px;
+  color: var(--teal-dark);
+  font-family: var(--font-code);
+  font-size: max(16px, 0.75rem);
+  font-weight: 800;
+  min-height: 42px;
+  padding: 0 10px;
+}
+
+.native-reminder-time input:disabled {
+  opacity: 0.45;
+}
+
+.native-offline-note {
+  align-items: flex-start;
+  background: var(--success-soft);
+  border: 1px solid #badbcd;
+  border-radius: 13px;
+  color: var(--success-dark);
+  display: grid;
+  font-size: 0.625rem;
+  gap: 9px;
+  grid-template-columns: 24px 1fr;
+  line-height: 1.55;
+  margin-top: 12px;
+  padding: 11px;
+}
+
+.native-offline-note span {
+  align-items: center;
+  background: var(--success);
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.native-offline-note p,
+.native-settings-message {
+  margin: 0;
+}
+
+.native-settings-message {
+  color: var(--teal-dark);
+  font-size: 0.625rem;
+  font-weight: 750;
+  line-height: 1.5;
+  padding: 10px 2px 0;
+}
+
+.native-reminder-save {
+  justify-content: center;
+  margin-top: 15px;
+  min-height: 48px;
+  width: 100%;
+}
+
+.native-settings-links {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 1px;
+  margin-top: 18px;
+  padding-top: 7px;
+}
+
+.native-settings-links button,
+.native-delete-data {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  font-size: 0.625rem;
+  font-weight: 750;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 3px;
+  text-align: left;
+  width: 100%;
+}
+
+.native-settings-links button {
+  border-bottom: 1px solid var(--line);
+}
+
+.native-settings-links button span {
+  color: var(--teal);
+}
+
+.native-delete-data {
+  color: var(--danger);
+  justify-content: center;
+  margin-top: 7px;
+}
+
 /* App installation */
 .install-backdrop {
   align-items: center;
@@ -2892,6 +3147,150 @@ a {
   margin: 3px 0 0;
 }
 
+/* Public privacy and support pages */
+.legal-shell {
+  min-height: 100dvh;
+  padding: clamp(20px, 5vw, 72px) max(14px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+
+.legal-paper {
+  background:
+    linear-gradient(90deg, transparent 0 48px, rgba(185, 67, 104, 0.11) 48px 50px, transparent 50px),
+    repeating-linear-gradient(0deg, transparent 0 35px, rgba(185, 67, 104, 0.045) 35px 36px),
+    var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  margin: 0 auto;
+  max-width: 860px;
+  padding: clamp(27px, 5vw, 64px) clamp(25px, 7vw, 86px);
+}
+
+.legal-back {
+  color: var(--teal-dark);
+  display: inline-flex;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  margin-bottom: 30px;
+  text-decoration: none;
+}
+
+.legal-paper h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  letter-spacing: -0.055em;
+  line-height: 1.08;
+  margin: 8px 0 12px;
+}
+
+.legal-lead {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.7;
+  margin: 0 0 6px;
+}
+
+.legal-date,
+.legal-fineprint {
+  color: var(--muted);
+  font-size: 0.625rem;
+  line-height: 1.65;
+}
+
+.legal-paper section {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+.legal-paper h2 {
+  font-size: 0.875rem;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+
+.legal-paper section p,
+.legal-english p {
+  color: #66515b;
+  font-size: 0.75rem;
+  line-height: 1.8;
+  margin: 0;
+}
+
+.legal-paper p a {
+  color: var(--teal-dark);
+  font-weight: 800;
+}
+
+.legal-english {
+  background: var(--teal-soft);
+  border-radius: 14px;
+  margin-top: 26px;
+  padding: 18px;
+}
+
+.legal-english h2 {
+  color: var(--teal-dark);
+}
+
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 28px;
+}
+
+.legal-links a {
+  background: var(--teal-soft);
+  border: 1px solid #e5bdca;
+  border-radius: 10px;
+  color: var(--teal-dark);
+  font-size: 0.625rem;
+  font-weight: 800;
+  min-height: 42px;
+  padding: 12px 14px;
+  text-decoration: none;
+}
+
+.license-list {
+  display: grid;
+  gap: 10px;
+  margin: 28px 0 20px;
+}
+
+.license-list a {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px 12px;
+  grid-template-columns: 1fr auto;
+  padding: 14px 16px;
+  text-decoration: none;
+}
+
+.license-list strong,
+.license-list span {
+  display: block;
+}
+
+.license-list strong {
+  font-size: 0.75rem;
+}
+
+.license-list span {
+  color: var(--muted);
+  font-size: 0.625rem;
+}
+
+.license-list b {
+  color: var(--teal);
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
 @media (max-width: 1650px) {
   .save-state,
   .button-quiet {
@@ -3020,7 +3419,8 @@ a {
   .language-toggle button,
   .font-size-control button,
   .app-mode-nav button,
-  .pwa-install-trigger {
+  .pwa-install-trigger,
+  .native-tools-trigger {
     min-height: 44px;
   }
 
@@ -3351,6 +3751,19 @@ a {
     min-height: 0;
   }
 
+  .notes-head {
+    gap: 9px;
+  }
+
+  .notes-head-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+
+  .share-note-button {
+    min-height: 44px;
+  }
+
   .mobile-notes-context {
     align-items: center;
     background: #fff1f6;
@@ -3404,6 +3817,23 @@ a {
   .install-dialog {
     max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     overflow-y: auto;
+  }
+
+  .native-settings-backdrop {
+    align-items: flex-end;
+    padding: max(12px, env(safe-area-inset-top)) 0 0;
+  }
+
+  .native-settings-dialog {
+    border-bottom: 0;
+    border-radius: 24px 24px 0 0;
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)));
+    max-width: none;
+    padding: 25px max(19px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(19px, env(safe-area-inset-left));
+  }
+
+  .native-settings-handle {
+    display: block;
   }
 }
 

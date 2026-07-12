@@ -20,7 +20,7 @@
 - Android：打开网站后点“安装 App”，确认安装即可。
 - iPhone / iPad：使用 Safari 打开网站，点“分享”→“添加到主屏幕”。
 
-学习内容、进度和笔记支持设备本地离线访问；第一次运行 Python 测试仍需联网下载运行环境。
+学习内容、进度和笔记支持设备本地离线访问；网页/PWA 第一次运行 Python 测试仍需联网下载运行环境。
 
 > 快速测试只覆盖典型示例，最终是否完全正确仍以力扣官方提交结果为准。
 
@@ -42,8 +42,19 @@ GITHUB_PAGES=true npm run build
 
 GitHub Pages 静态产物位于 `dist/client`。推送到 `main` 后，`.github/workflows/pages.yml` 会自动构建并部署。
 
+## iOS 原生版本
+
+iOS 版本使用 Capacitor 8 和 Swift Package Manager，最低支持 iOS 15。它会把网页资源、固定版本的 Pyodide、Python 标准库和测试全部放进安装包，不会在运行时加载 GitHub Pages 或远程 Python 运行环境。
+
+```bash
+npm run test:ios  # 构建、同步并检查完整 iOS 资源包
+npm run ios:open  # 安装 Xcode 26+ 后打开工程
+```
+
+iOS 工程位于 `ios/App/App.xcodeproj`，Bundle ID 为 `com.coocylh.tijiebu`。首次真机或 TestFlight 构建需要在 Xcode 中登录 Apple Developer 账号并选择签名团队。完整上架清单见 `docs/app-store/README.md`。
+
 ## 数据与隐私
 
-代码和笔记保存在当前浏览器的 `localStorage`，不会上传到服务器。Python 通过浏览器中的 Pyodide 运行；第一次运行需要下载运行环境。
+网页代码和笔记保存在当前浏览器的 `localStorage`；iOS 版本使用系统设备偏好存储。两者都不会把学习内容上传到服务器。网页通过浏览器中的 Pyodide 运行 Python；iOS 版本使用随 App 打包的离线运行环境。
 
 题单名称与题目链接归 LeetCode / 力扣所有；本站的简短中文说明为学习用途的改写。
