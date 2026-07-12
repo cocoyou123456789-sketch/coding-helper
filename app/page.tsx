@@ -58,11 +58,12 @@ const EMPTY_PROFILE: LearningProfile = {
 const pageCopy = {
   zh: {
     brandName: "题解簿",
-    brandSubtitle: "LeetCode Hot 100 游戏化学习",
+    brandSubtitle: "LeetCode Hot 100 学习手账",
     progress: "学习进度",
     autosave: "笔记自动保存在本机",
-    freePractice: "原题练习",
-    learningPath: "路径",
+    freePractice: "完整题练习",
+    learningPath: "学习首页",
+    appNavigation: "主要页面",
     mobileProblemList: "选题",
     mobileCode: "原题 + 代码",
     mobileNotes: "笔记",
@@ -106,6 +107,7 @@ const pageCopy = {
     resetCode: "恢复初始代码",
     run: "运行测试",
     running: "运行中…",
+    nextReview: "测试通过，下一步：写复盘 →",
     editorLabel: "Python 代码编辑器",
     quickTest: "快速测试",
     testHelp: "检查示例是否通过；最终结果仍以力扣提交为准。",
@@ -151,20 +153,21 @@ const pageCopy = {
     workerFailed: "无法启动 Python 环境，请检查网络后重试。",
     guideTitle: "第一次学习，照着这 4 步来",
     guideSteps: [
-      ["先完成今日小课", "先看题意卡，再认题型和核心思路，不需要立刻写代码。"],
-      ["用极速挑战练反应", "在 60 秒里快速判断题型、方法和复杂度。"],
-      ["用闪卡安排复习", "没记住的内容会回到复习队列，不用自己安排顺序。"],
-      ["最后进入原题练习", "在同一个界面读题、写代码、运行测试并解释每一行，压力会小很多。"],
+      ["选择难度", "第一次建议从简单开始，之后再逐渐提高。"],
+      ["完成一节小课", "先看懂题意和题型，不需要立刻写代码。"],
+      ["进入完整题练习", "在同一个界面读题、写代码并运行测试。"],
+      ["写下复盘", "解释关键代码和错误原因，下次更容易认出来。"],
     ],
     goToPath: "去学习路径",
   },
   en: {
     brandName: "AlgoQuest",
-    brandSubtitle: "LeetCode Hot 100 Game-Based Learning",
+    brandSubtitle: "LeetCode Hot 100 Study Notebook",
     progress: "Progress",
     autosave: "Notes save automatically on this device",
-    freePractice: "Problem Practice",
-    learningPath: "Path",
+    freePractice: "Full Practice",
+    learningPath: "Study Home",
+    appNavigation: "Main pages",
     mobileProblemList: "Choose",
     mobileCode: "Prompt + Code",
     mobileNotes: "Notes",
@@ -208,6 +211,7 @@ const pageCopy = {
     resetCode: "Reset starter code",
     run: "Run tests",
     running: "Running…",
+    nextReview: "Tests passed — next: write your review →",
     editorLabel: "Python code editor",
     quickTest: "Quick tests",
     testHelp: "Check the examples here; LeetCode remains the final judge.",
@@ -253,10 +257,10 @@ const pageCopy = {
     workerFailed: "Python could not start. Check your connection and try again.",
     guideTitle: "Your first learning session in 4 steps",
     guideSteps: [
-      ["Finish the daily lesson", "Read the prompt card, then identify the pattern and core idea before coding."],
-      ["Build speed in Sprint", "Use 60-second rounds to recognize topics, methods, and complexity."],
-      ["Review with flashcards", "Anything you forget returns to the review queue automatically."],
-      ["Finish with problem practice", "Read the prompt, write code, run tests, and explain each line in one workspace."],
+      ["Choose a level", "Easy is the best place to begin, then move up gradually."],
+      ["Finish one short lesson", "Understand the prompt and pattern before coding."],
+      ["Open full practice", "Read the problem, write code, and run tests in one workspace."],
+      ["Write a review", "Explain key lines and mistakes so the pattern is easier next time."],
     ],
     goToPath: "Go to learning path",
   },
@@ -354,7 +358,7 @@ export default function Home() {
   const [language, setLanguage] = useState<Language>("zh");
   const [search, setSearch] = useState("");
   const [topic, setTopic] = useState("all");
-  const [difficultyFilter, setDifficultyFilter] = useState<"all" | Problem["difficulty"]>("all");
+  const [difficultyFilter, setDifficultyFilter] = useState<"all" | Problem["difficulty"]>("简单");
   const [noteTab, setNoteTab] = useState<"line" | "review">("line");
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
   const [hydrated, setHydrated] = useState(false);
@@ -383,6 +387,9 @@ export default function Home() {
   const currentRecord = mergeRecord(currentProblem, records[currentProblem.id]);
   const currentDetail = localizeDetail(currentProblem, language);
   const codeLines = currentRecord.code.split("\n");
+  const allQuickTestsPassed = runState.phase === "done"
+    && runState.results.length > 0
+    && runState.results.every((result) => result.passed);
   const fontScale = Math.round((fontSize / MIN_FONT_SIZE) * 100);
 
   const topics = useMemo(
@@ -554,13 +561,10 @@ export default function Home() {
     setMobileWorkspaceTab("code");
   }
 
-  function toggleAppMode() {
-    if (appMode === "path") {
-      setAppMode("workspace");
-      setMobileWorkspaceTab("library");
-      return;
-    }
-    setAppMode("path");
+  function showAppMode(nextMode: "path" | "workspace") {
+    setAppMode(nextMode);
+    if (nextMode === "workspace" && appMode !== "workspace") setMobileWorkspaceTab("library");
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
   function selectLanguage(nextLanguage: Language) {
@@ -779,18 +783,15 @@ export default function Home() {
 
         <div className="header-actions">
           <span className="save-state"><i />{copy.autosave}</span>
-          <PwaInstaller language={language} />
+          <nav className="app-mode-nav" aria-label={copy.appNavigation}>
+            <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
+            <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
+          </nav>
           <div className="language-toggle" role="group" aria-label="Language / 语言">
             <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} onClick={() => selectLanguage("zh")}>中文</button>
             <button type="button" lang="en" className={language === "en" ? "is-active" : ""} onClick={() => selectLanguage("en")}>EN</button>
           </div>
-          <button
-            className="button mode-toggle"
-            type="button"
-            onClick={toggleAppMode}
-          >
-            {appMode === "path" ? copy.freePractice : copy.learningPath}
-          </button>
+          <PwaInstaller language={language} />
           <div className="font-size-control" aria-label={copy.adjustFont}>
             <span>{copy.fontSize}</span>
             <button
@@ -1059,6 +1060,12 @@ export default function Home() {
                 );
               })}
             </div>
+
+            {allQuickTestsPassed && (
+              <button className="next-review-button" type="button" onClick={() => { setNoteTab("review"); setMobileWorkspaceTab("notes"); }}>
+                {copy.nextReview}
+              </button>
+            )}
 
             {runState.phase === "done" && runState.stdout && (
               <details className="stdout-block"><summary>{copy.printOutput}</summary><pre>{runState.stdout}</pre></details>

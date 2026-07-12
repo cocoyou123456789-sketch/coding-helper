@@ -6,7 +6,7 @@ const siteUrl = "https://cocoyou123456789-sketch.github.io/coding-helper";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "题解簿｜LeetCode Hot 100 小白学习工作台",
-  description: "用每日小课、极速抢答、算法闪卡和代码挑战，循序渐进学习 LeetCode Hot 100。",
+  description: "浅粉色算法学习手账：选难度、学题型、写代码、运行测试并记录逐行笔记。",
   applicationName: "题解簿",
   manifest: `${siteUrl}/manifest.webmanifest`,
   formatDetection: {
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "题解簿",
   },
   icons: {
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "题解簿｜LeetCode Hot 100",
-    description: "每日小课、极速抢答、算法闪卡、代码测试——为算法小白设计的游戏化学习路径。",
+    description: "像写学习手账一样掌握 LeetCode Hot 100：小课、完整练习、代码测试和逐行笔记。",
     type: "website",
     locale: "zh_CN",
     url: siteUrl,
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
       {
         url: `${siteUrl}/og.png`,
         width: 1728,
-        height: 907,
+        height: 900,
         alt: "题解簿 LeetCode Hot 100 学习工作台",
       },
     ],
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "题解簿｜LeetCode Hot 100",
-    description: "用小课、抢答和闪卡学习 LeetCode Hot 100。",
+    description: "选难度、学题型、写代码、做测试，再把思路记下来。",
     images: [`${siteUrl}/og.png`],
   },
 };
@@ -53,7 +53,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#15231f",
+  themeColor: "#b94368",
 };
 
 export default function RootLayout({

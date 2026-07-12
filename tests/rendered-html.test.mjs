@@ -24,7 +24,8 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.match(html, /题解簿/);
   assert.match(html, /LeetCode Hot 100/);
   assert.match(html, /两数之和/);
-  assert.match(html, /今天学一点/);
+  assert.match(html, /今天写一页/);
+  assert.match(html, /第一次使用？照着 4 步走/);
   assert.match(html, /闯关小课/);
   assert.match(html, /极速抢答/);
   assert.match(html, /算法闪卡/);
@@ -72,6 +73,8 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.match(pageSource, /完整题目练习工作台/);
   assert.match(pageSource, /原题 \+ 代码/);
   assert.match(pageSource, /mobile-notes-context/);
+  assert.match(pageSource, /app-mode-nav/);
+  assert.match(pageSource, /测试通过，下一步：写复盘/);
   assert.match(pageSource, /mobile-workspace-tabs/);
   assert.match(pageSource, /wrap="off"/);
   assert.match(pwaSource, /serviceWorker\.register/);
@@ -82,7 +85,10 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.equal(manifest.start_url, "./?source=pwa");
   assert.equal(manifest.scope, "./");
   assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.background_color, "#fff7f9");
+  assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
+  assert.match(serviceWorkerSource, /2026-07-12-pink/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));

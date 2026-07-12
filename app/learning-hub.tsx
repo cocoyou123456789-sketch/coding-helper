@@ -89,9 +89,10 @@ const hubCopy = {
     timeUp: "时间到",
     sprintSummary: (count: number, best: number) => `本局完成 ${count} 题，历史最高 ${best} 分。`,
     again: "再来 60 秒",
-    dailyQuest: "YOUR DAILY QUEST",
-    heroTitle: <>今天学一点，<br />不用死磕一道题。</>,
-    heroBody: "先认题型，再做快问快答和闪卡，最后才进入完整代码。每次 10–15 分钟。",
+    dailyQuest: "TODAY'S STUDY NOTE",
+    heroTitle: <>今天写一页，<br />把不会变成会。</>,
+    heroBody: "第一次来不用研究功能：先选难度，做一节小课，再进入完整题目练习，最后记下自己的思路。",
+    startHere: "第一次来，从这里开始",
     startLesson: "开始今日小课",
     sprint: "60 秒极速挑战",
     openPractice: "直接练完整题",
@@ -102,23 +103,33 @@ const hubCopy = {
     streak: "连续天数",
     totalXp: "总经验值",
     lessons: "完成小课",
-    lessonDuration: "10–15 分钟",
+    lessonDuration: "推荐第 1 步 · 10–15 分钟",
     lessonMode: "闯关小课",
     lessonModeBody: "题意卡 → 识别题型 → 选择思路 → 判断复杂度",
     start: "开始 →",
-    sprintDuration: "60 秒",
+    sprintDuration: "可选加练 · 60 秒",
     sprintMode: "极速抢答",
     sprintModeBody: "随机混合题型，连对越多得分越高。",
     challenge: "挑战 →",
-    cardsDue: (count: number) => `${count} 张待复习`,
+    cardsDue: (count: number) => `可选复习 · ${count} 张待复习`,
     cardsMode: "算法闪卡",
     cardsModeBody: "快速回忆题型、核心思路和复杂度。",
     review: "复习 →",
-    practiceDuration: "不限时 · 边做边记",
+    practiceDuration: "推荐第 2 步 · 边做边记",
     practiceMode: "完整题目练习",
     practiceModeBody: "查看题意重述和官方原题链接，写代码、跑测试并同步记笔记。",
     practice: "练习 →",
+    quickStartKicker: "START HERE",
+    quickStartTitle: "第一次使用？照着 4 步走",
+    quickStartBody: "每一步都很短，学习记录会自动保存。",
+    quickStartSteps: [
+      ["选难度", "第一次建议从简单开始"],
+      ["做小课", "先理解题型，不急着写代码"],
+      ["练完整题", "写代码并运行快速测试"],
+      ["记下复盘", "解释每一行，下次更容易"],
+    ],
     learnByDifficulty: "按难度学习",
+    recommendedLevel: "推荐",
     allLevels: "全部",
     difficultyLabels: { 简单: "简单", 中等: "中等", 困难: "困难" } as Record<Problem["difficulty"], string>,
     learningPath: "按题型闯关",
@@ -176,9 +187,10 @@ const hubCopy = {
     timeUp: "Time is up",
     sprintSummary: (count: number, best: number) => `You answered ${count} questions. Best score: ${best}.`,
     again: "Play another 60 seconds",
-    dailyQuest: "YOUR DAILY QUEST",
-    heroTitle: <>Learn a little today.<br />Never grind one problem for hours.</>,
-    heroBody: "Recognize the pattern, answer a few quick questions, review flashcards, and only then open the full coding problem. Each session takes 10–15 minutes.",
+    dailyQuest: "TODAY'S STUDY NOTE",
+    heroTitle: <>Write one page today.<br />Turn “I can’t” into “I can.”</>,
+    heroBody: "No setup knowledge needed: choose a level, finish one short lesson, practice a full problem, and save what you learned.",
+    startHere: "New here? Start here",
     startLesson: "Start today’s lesson",
     sprint: "60-second Sprint",
     openPractice: "Practice a full problem",
@@ -189,23 +201,33 @@ const hubCopy = {
     streak: "Day streak",
     totalXp: "Total XP",
     lessons: "Lessons",
-    lessonDuration: "10–15 minutes",
+    lessonDuration: "Recommended step 1 · 10–15 min",
     lessonMode: "Quest lesson",
     lessonModeBody: "Prompt card → pattern → approach → complexity",
     start: "Start →",
-    sprintDuration: "60 seconds",
+    sprintDuration: "Optional practice · 60 sec",
     sprintMode: "Speed quiz",
     sprintModeBody: "Mixed topics, fast answers, and a growing combo score.",
     challenge: "Play →",
-    cardsDue: (count: number) => `${count} cards due`,
+    cardsDue: (count: number) => `Optional review · ${count} cards due`,
     cardsMode: "Algorithm flashcards",
     cardsModeBody: "Recall the topic, core idea, clue, and complexity.",
     review: "Review →",
-    practiceDuration: "Untimed · Code and take notes",
+    practiceDuration: "Recommended step 2 · Code & notes",
     practiceMode: "Full problem practice",
     practiceModeBody: "Read a clear paraphrase, open the official prompt, run tests, and take line notes.",
     practice: "Practice →",
+    quickStartKicker: "START HERE",
+    quickStartTitle: "First visit? Follow these 4 steps",
+    quickStartBody: "Each step is short, and your progress saves automatically.",
+    quickStartSteps: [
+      ["Choose a level", "Easy is the best place to begin"],
+      ["Take a lesson", "Understand the pattern before coding"],
+      ["Practice fully", "Write code and run quick tests"],
+      ["Save a review", "Explain each line for next time"],
+    ],
     learnByDifficulty: "Learn by difficulty",
+    recommendedLevel: "Recommended",
     allLevels: "All",
     difficultyLabels: { 简单: "Easy", 中等: "Medium", 困难: "Hard" } as Record<Problem["difficulty"], string>,
     learningPath: "Topic quests",
@@ -600,9 +622,17 @@ export default function LearningHub({
           <div className="activity-kicker">{text.dailyQuest}</div>
           <h1>{text.heroTitle}</h1>
           <p>{text.heroBody}</p>
+          <div className="hero-difficulty" role="group" aria-label={text.learnByDifficulty}>
+            <strong>{text.learnByDifficulty}</strong>
+            <button type="button" className={difficultyFilter === "all" ? "is-active" : ""} onClick={() => onDifficultyChange("all")}>{text.allLevels}</button>
+            {(Object.keys(difficultyOrder) as Problem["difficulty"][]).map((difficulty) => (
+              <button type="button" key={difficulty} className={difficultyFilter === difficulty ? `is-active difficulty-${difficultyOrder[difficulty]}` : ""} onClick={() => onDifficultyChange(difficulty)}>
+                {text.difficultyLabels[difficulty]}{difficulty === "简单" ? ` · ${text.recommendedLevel}` : ""}
+              </button>
+            ))}
+          </div>
           <div className="hero-actions">
-            <button className="learn-primary" type="button" onClick={() => startLesson()}>{text.startLesson}</button>
-            <button className="learn-secondary" type="button" onClick={startSprint}>{text.sprint}</button>
+            <button className="learn-primary" type="button" onClick={() => startLesson()}>{text.startHere}</button>
             <button className="learn-secondary" type="button" onClick={() => onOpenProblem(dailyQueue[0]?.id ?? problems[0].id)}>{text.openPractice}</button>
           </div>
         </div>
@@ -620,15 +650,21 @@ export default function LearningHub({
         </div>
       </div>
 
-      <div className="difficulty-filter-bar" role="group" aria-label={text.learnByDifficulty}>
-        <strong>{text.learnByDifficulty}</strong>
-        <button type="button" className={difficultyFilter === "all" ? "is-active" : ""} onClick={() => onDifficultyChange("all")}>{text.allLevels}</button>
-        {(Object.keys(difficultyOrder) as Problem["difficulty"][]).map((difficulty) => (
-          <button type="button" key={difficulty} className={difficultyFilter === difficulty ? `is-active difficulty-${difficultyOrder[difficulty]}` : ""} onClick={() => onDifficultyChange(difficulty)}>
-            {text.difficultyLabels[difficulty]}
-          </button>
-        ))}
-      </div>
+      <section className="quick-start-strip" aria-labelledby="quick-start-title">
+        <div className="quick-start-copy">
+          <div className="activity-kicker">{text.quickStartKicker}</div>
+          <h2 id="quick-start-title">{text.quickStartTitle}</h2>
+          <p>{text.quickStartBody}</p>
+        </div>
+        <ol>
+          {text.quickStartSteps.map(([title, body], index) => (
+            <li key={title}>
+              <b>{index + 1}</b>
+              <span><strong>{title}</strong><small>{body}</small></span>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <div className="learning-modes">
         <button type="button" className="mode-card mode-lesson" onClick={() => startLesson()}>
@@ -636,8 +672,13 @@ export default function LearningHub({
           <div><small>{text.lessonDuration}</small><h2>{text.lessonMode}</h2><p>{text.lessonModeBody}</p></div>
           <b>{text.start}</b>
         </button>
+        <button type="button" className="mode-card mode-practice" onClick={() => onOpenProblem(dailyQueue[0]?.id ?? problems[0].id)}>
+          <span className="mode-icon">02</span>
+          <div><small>{text.practiceDuration}</small><h2>{text.practiceMode}</h2><p>{text.practiceModeBody}</p></div>
+          <b>{text.practice}</b>
+        </button>
         <button type="button" className="mode-card mode-sprint" onClick={startSprint}>
-          <span className="mode-icon">⚡</span>
+          <span className="mode-icon">＋</span>
           <div><small>{text.sprintDuration}</small><h2>{text.sprintMode}</h2><p>{text.sprintModeBody}</p></div>
           <b>{text.challenge}</b>
         </button>
@@ -645,11 +686,6 @@ export default function LearningHub({
           <span className="mode-icon">↻</span>
           <div><small>{text.cardsDue(dailyQueue.filter((problem) => records[problem.id]?.status === "review").length || dailyQueue.length)}</small><h2>{text.cardsMode}</h2><p>{text.cardsModeBody}</p></div>
           <b>{text.review}</b>
-        </button>
-        <button type="button" className="mode-card mode-practice" onClick={() => onOpenProblem(dailyQueue[0]?.id ?? problems[0].id)}>
-          <span className="mode-icon">{">_"}</span>
-          <div><small>{text.practiceDuration}</small><h2>{text.practiceMode}</h2><p>{text.practiceModeBody}</p></div>
-          <b>{text.practice}</b>
         </button>
       </div>
 
