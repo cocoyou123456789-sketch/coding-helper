@@ -2,17 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  editForBackspace,
-  editForBracket,
-  editForEnter,
-  editForTab,
   syncLineNotes,
-  type EditorEdit,
   type LineNoteEdit,
 } from "./code-editor";
 import CourseNotes from "./course-notes";
 import courseStyles from "./course-notes.module.css";
 import { COURSE_NOTES_STORAGE_KEY } from "./course-notes-model";
+import LeetCodeCodeEditor, { type LeetCodeCodeEditorHandle } from "./leetcode-code-editor";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import {
   clearStoredStudyData,
@@ -31,6 +27,7 @@ import {
 } from "./native-app";
 import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
+import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
 
 export const dynamic = "force-static";
@@ -88,8 +85,8 @@ const EMPTY_PROFILE: LearningProfile = {
 const pageCopy = {
   zh: {
     brandName: "题解簿",
-    brandSubtitle: "LeetCode Hot 100 学习手账",
-    nativeBrandSubtitle: "100 道经典算法题学习手账",
+    brandSubtitle: "LeetCode Hot 100 + 加练学习手账",
+    nativeBrandSubtitle: "101 道经典算法题学习手账",
     progress: "学习进度",
     autosave: "笔记自动保存在本机",
     nativeAutosave: "代码和笔记已保存在这台设备",
@@ -109,10 +106,10 @@ const pageCopy = {
     adjustFont: "调整字体大小",
     guide: "新手怎么用",
     practiceWorkspaceTitle: "完整题目练习工作台",
-    practiceWorkspaceBody: "左边选择题目，中间查看题意重述、示例和官方原题链接，再写代码并运行测试；右边同步记录逐行解释和复盘。",
+    practiceWorkspaceBody: "左侧阅读题意整理、示例和关键限制，右侧用专业编辑器写代码并运行测试；官方原文和正式提交仍在 LeetCode 完成。",
     practiceSteps: ["读题", "写代码", "记笔记"],
     currentPractice: "当前练习",
-    libraryTitle: "Hot 100 练习题库",
+    libraryTitle: "Hot 100 + 加练",
     nativeLibraryTitle: "经典算法练习题库",
     questionCount: (count: number) => `${count} 题`,
     search: "搜索题目",
@@ -127,15 +124,18 @@ const pageCopy = {
     noMatch: "没有找到匹配的题目，换个关键词试试。",
     beginnerTipTitle: "先把题目说成人话",
     beginnerTipBody: "能复述输入和输出，再开始写代码。",
-    officialProblem: "在力扣查看官方原题 ↗",
-    statementTitle: "题意重述",
-    statementNote: "独立重述 · 完整原题与限制请查看力扣",
-    nativeStatementNote: "独立改写 · 题目、示例和测试已离线收录",
+    officialProblem: (id: number, title: string) => `来源：LeetCode ${id}《${title}》↗`,
+    statementTitle: "题目内容",
+    statementNote: "题意、示例与关键限制已整理；官方原文见 LeetCode",
+    nativeStatementNote: "题意整理、示例和测试已离线收录",
     collapseProblem: "收起题目",
     expandProblem: "展开题目",
     functionInput: "函数输入",
     example: "示例",
-    requirements: "注意事项",
+    requirements: "限制与要求",
+    exampleInput: "输入",
+    exampleOutput: "输出",
+    exampleExplanation: "说明",
     beginnerHint: "小白提示",
     targetComplexity: "目标复杂度：",
     shortcut: "Enter 自动缩进 · Tab 调整缩进 · ⌘ / Ctrl + Enter 运行",
@@ -154,15 +154,15 @@ const pageCopy = {
     failed: "× 未通过",
     test: (index: number) => `测试 ${index}`,
     printOutput: "查看 print 输出",
-    notebookLabel: "逐行解释和笔记",
+    notebookLabel: "每一行代码说明和笔记",
     notebookTitle: "本题练习笔记",
     notesForProblem: "正在记录",
     viewProblemAndCode: "查看题目和代码",
     saved: "已自动保存",
-    lineNotes: "逐行解释",
+    lineNotes: "写的每一行都是什么意思",
     reflection: "思路与复盘",
-    linePrompt: "每一行都回答：",
-    lineQuestions: "读了什么？做了什么？为什么？",
+    linePrompt: "写的每一行都是什么意思？",
+    lineQuestions: "用自己的话说明：这一行做了什么，为什么这样写。",
     fillNotes: "一键补齐基础解释",
     blankLine: "（空行）",
     thinkingTitle: "我的解题思路",
@@ -179,7 +179,7 @@ const pageCopy = {
     difficultyLabels: { 简单: "简单", 中等: "中等", 困难: "困难" } as Record<Problem["difficulty"], string>,
     notRun: "还没有运行测试",
     resetMessage: "代码已恢复，还没有运行测试",
-    resetConfirm: "确定恢复这道题的初始代码吗？你的逐行解释会保留。",
+    resetConfirm: "确定恢复这道题的初始代码吗？你的每行代码说明会保留。",
     loadingPython: "正在加载 Python 环境…首次运行会稍慢",
     runningCode: "正在运行…",
     timeout: "运行超过 20 秒，已自动停止。请检查是否写了不会结束的循环。",
@@ -223,8 +223,8 @@ const pageCopy = {
   },
   en: {
     brandName: "AlgoQuest",
-    brandSubtitle: "LeetCode Hot 100 Study Notebook",
-    nativeBrandSubtitle: "A study notebook for 100 classic algorithm problems",
+    brandSubtitle: "LeetCode Hot 100 + Extra Practice Notebook",
+    nativeBrandSubtitle: "A study notebook for 101 classic algorithm problems",
     progress: "Progress",
     autosave: "Notes save automatically on this device",
     nativeAutosave: "Code and notes are saved on this device",
@@ -244,10 +244,10 @@ const pageCopy = {
     adjustFont: "Adjust text size",
     guide: "How it works",
     practiceWorkspaceTitle: "Full Problem Practice Workspace",
-    practiceWorkspaceBody: "Choose a problem, read an independent paraphrase and open the official prompt, then write and test code while keeping line notes and reflections.",
+    practiceWorkspaceBody: "Read the summarized prompt, examples, and key constraints beside a professional editor; use LeetCode for the official statement and final submission.",
     practiceSteps: ["Read", "Code", "Take notes"],
     currentPractice: "Current problem",
-    libraryTitle: "Hot 100 Practice Set",
+    libraryTitle: "Hot 100 + Extra Practice",
     nativeLibraryTitle: "Classic Algorithm Practice Set",
     questionCount: (count: number) => `${count} problems`,
     search: "Search problems",
@@ -262,15 +262,18 @@ const pageCopy = {
     noMatch: "No matching problems. Try another search.",
     beginnerTipTitle: "Say the problem in plain language",
     beginnerTipBody: "Explain the input and output before writing code.",
-    officialProblem: "View the official problem on LeetCode ↗",
-    statementTitle: "Problem paraphrase",
-    statementNote: "Independent paraphrase · View the official statement and full constraints on LeetCode",
-    nativeStatementNote: "Independent rewrite · prompts, examples, and tests are available offline",
+    officialProblem: (id: number, title: string) => `Source: LeetCode ${id} “${title}” ↗`,
+    statementTitle: "Problem",
+    statementNote: "Summary, examples, and key constraints; see LeetCode for the official text",
+    nativeStatementNote: "Prompt summary, examples, and tests are available offline",
     collapseProblem: "Collapse",
     expandProblem: "Expand",
     functionInput: "Function input",
     example: "Example",
-    requirements: "Key rules",
+    requirements: "Constraints & requirements",
+    exampleInput: "Input",
+    exampleOutput: "Output",
+    exampleExplanation: "Explanation",
     beginnerHint: "Beginner hint",
     targetComplexity: "Target: ",
     shortcut: "Enter auto-indents · Tab adjusts indent · ⌘ / Ctrl + Enter to run",
@@ -289,15 +292,15 @@ const pageCopy = {
     failed: "× Failed",
     test: (index: number) => `Test ${index}`,
     printOutput: "View print output",
-    notebookLabel: "Line explanations and notes",
+    notebookLabel: "Line meanings and notes",
     notebookTitle: "Practice notes",
     notesForProblem: "Taking notes for",
     viewProblemAndCode: "View prompt & code",
     saved: "Saved",
-    lineNotes: "Line by line",
+    lineNotes: "What each line means",
     reflection: "Plan & review",
-    linePrompt: "For every line, answer:",
-    lineQuestions: "What does it read, do, and why?",
+    linePrompt: "What does each line of your code mean?",
+    lineQuestions: "Explain in your own words what this line does and why it is here.",
     fillNotes: "Add starter explanations",
     blankLine: "(blank line)",
     thinkingTitle: "My approach",
@@ -457,6 +460,8 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showStatement, setShowStatement] = useState(true);
+  const [showProblemList, setShowProblemList] = useState(false);
+  const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [appMode, setAppMode] = useState<"path" | "workspace" | "course">("path");
   const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<"library" | "code" | "notes">("library");
@@ -469,8 +474,7 @@ export default function Home() {
   const workerRef = useRef<Worker | null>(null);
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editorRef = useRef<HTMLTextAreaElement | null>(null);
-  const lineNumbersRef = useRef<HTMLDivElement | null>(null);
+  const codeEditorRef = useRef<LeetCodeCodeEditorHandle | null>(null);
 
   const copy = pageCopy[language];
   const brandSubtitle = nativeApp ? copy.nativeBrandSubtitle : copy.brandSubtitle;
@@ -510,7 +514,7 @@ export default function Home() {
         String(problem.id).includes(keyword) ||
         problem.title.toLowerCase().includes(keyword) ||
         problem.topic.toLowerCase().includes(keyword);
-      return matchesTopic && matchesDifficulty && matchesSearch;
+      return keyword ? matchesSearch : matchesTopic && matchesDifficulty;
     }).sort((first, second) => difficultyOrder[first.difficulty] - difficultyOrder[second.difficulty]);
   }, [difficultyFilter, displayProblems, search, topic]);
 
@@ -676,12 +680,15 @@ export default function Home() {
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setNoteTab("line");
     setShowStatement(true);
+    setShowProblemList(false);
     setMobileWorkspaceTab("code");
   }
 
   function showAppMode(nextMode: "path" | "workspace" | "course") {
     void playSelectionHaptic();
     setAppMode(nextMode);
+    setShowProblemList(false);
+    setShowNotesDrawer(false);
     if (nextMode === "workspace" && appMode !== "workspace") setMobileWorkspaceTab("library");
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
@@ -725,8 +732,8 @@ export default function Home() {
       .filter(Boolean)
       .join("\n");
     const headings = language === "zh"
-      ? { code: "我的代码", lines: "逐行解释", thinking: "解题思路", mistakes: "卡住或写错", review: "下次识别信号" }
-      : { code: "My code", lines: "Line explanations", thinking: "Approach", mistakes: "Mistakes", review: "Pattern to recognize" };
+      ? { code: "我的代码", lines: "每一行代码是什么意思", thinking: "解题思路", mistakes: "卡住或写错", review: "下次识别信号" }
+      : { code: "My code", lines: "What each line means", thinking: "Approach", mistakes: "Mistakes", review: "Pattern to recognize" };
 
     return [
       `${currentProblem.id}. ${currentProblem.title}`,
@@ -795,25 +802,9 @@ export default function Home() {
     });
   }
 
-  function applyEditorEdit(edit: EditorEdit, lineNoteEdit?: LineNoteEdit) {
-    updateEditorCode(edit.code, lineNoteEdit);
-    window.requestAnimationFrame(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      editor.focus();
-      editor.setSelectionRange(edit.selectionStart, edit.selectionEnd);
-    });
-  }
-
   function adjustEditorIndent(direction: "in" | "out") {
-    const editor = editorRef.current;
-    if (!editor) return;
-    applyEditorEdit(editForTab(
-      currentRecord.code,
-      editor.selectionStart,
-      editor.selectionEnd,
-      direction === "out",
-    ));
+    if (direction === "out") codeEditorRef.current?.outdent();
+    else codeEditorRef.current?.indent();
   }
 
   function runTests() {
@@ -912,49 +903,6 @@ export default function Home() {
     });
   }
 
-  function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.nativeEvent.isComposing) return;
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      runTests();
-      return;
-    }
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-    const editor = event.currentTarget;
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    let edit: EditorEdit | null = null;
-
-    if (event.key === "Enter") {
-      edit = editForEnter(currentRecord.code, start, end);
-    } else if (event.key === "Tab") {
-      edit = editForTab(currentRecord.code, start, end, event.shiftKey);
-    } else if (event.key === "Backspace") {
-      edit = editForBackspace(currentRecord.code, start, end);
-    } else {
-      edit = editForBracket(currentRecord.code, start, end, event.key);
-    }
-
-    if (!edit) return;
-    event.preventDefault();
-    applyEditorEdit(edit);
-  }
-
-  function handleEditorPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const insertedText = event.clipboardData.getData("text/plain");
-    if (!insertedText) return;
-    event.preventDefault();
-    const start = event.currentTarget.selectionStart;
-    const end = event.currentTarget.selectionEnd;
-    const caret = start + insertedText.length;
-    applyEditorEdit({
-      code: `${currentRecord.code.slice(0, start)}${insertedText}${currentRecord.code.slice(end)}`,
-      selectionStart: caret,
-      selectionEnd: caret,
-    }, { start, end, insertedText });
-  }
-
   return (
     <main className={`app-shell ${nativeApp ? "is-native-app" : ""}`}>
       <header className={`site-header ${courseStyles.courseNavigationHeader}`}>
@@ -1043,34 +991,69 @@ export default function Home() {
       ) : appMode === "course" ? (
         <CourseNotes language={language} nativeApp={nativeApp} />
       ) : (
-        <div className="workspace">
-        <section className="practice-workspace-header" aria-labelledby="practice-workspace-title">
-          <div className="practice-workspace-copy">
-            <div className="section-kicker">FULL PROBLEM PRACTICE</div>
-            <h1 id="practice-workspace-title">{copy.practiceWorkspaceTitle}</h1>
-            <p>{copy.practiceWorkspaceBody}</p>
+        <div className={`workspace ${ideStyles.workspace}`}>
+        <section className={ideStyles.topbar} aria-labelledby="practice-workspace-title">
+          <h1 id="practice-workspace-title" className="sr-only">{copy.practiceWorkspaceTitle}</h1>
+          <div className={ideStyles.topbarPrimary}>
+            <button
+              type="button"
+              className={ideStyles.problemMenuButton}
+              aria-expanded={showProblemList}
+              aria-controls="mobile-library-panel"
+              onClick={() => { setShowProblemList(true); setShowNotesDrawer(false); setMobileWorkspaceTab("library"); }}
+            >
+              <span className={ideStyles.problemMenuIcon} aria-hidden="true">☰</span>
+              <span>{language === "zh" ? "题目列表" : "Problem list"}</span>
+            </button>
+            <div className={ideStyles.currentProblem}>
+              <strong>{currentProblem.id}. {currentProblem.title}</strong>
+              <span>{copy.difficultyLabels[currentProblem.difficulty]} · {currentProblem.topic}</span>
+            </div>
           </div>
-          <ol className="practice-workflow" aria-label={copy.practiceWorkspaceTitle}>
-            {copy.practiceSteps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}
-          </ol>
-          <div className="practice-current">
-            <span>{copy.currentPractice}</span>
-            <strong>{currentProblem.id}. {currentProblem.title}</strong>
-            {!nativeApp && <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>}
+          <div className={ideStyles.topbarActions}>
+            <button
+              type="button"
+              className={ideStyles.notesButton}
+              aria-expanded={showNotesDrawer}
+              aria-controls="mobile-notes-panel"
+              onClick={() => { setShowNotesDrawer(true); setShowProblemList(false); setMobileWorkspaceTab("notes"); }}
+            >
+              <span aria-hidden="true">✎</span>
+              <span>{language === "zh" ? "笔记" : "Notes"}</span>
+            </button>
+            {!nativeApp && (
+              <a
+                className={ideStyles.officialButton}
+                href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {language === "zh" ? "去 LeetCode 提交" : "Submit on LeetCode"}<span aria-hidden="true">↗</span>
+              </a>
+            )}
           </div>
         </section>
+        {(showProblemList || showNotesDrawer) && (
+          <button
+            type="button"
+            className={ideStyles.drawerBackdrop}
+            aria-label={language === "zh" ? "关闭侧栏" : "Close drawer"}
+            onClick={() => { setShowProblemList(false); setShowNotesDrawer(false); }}
+          />
+        )}
         <nav className="mobile-workspace-tabs" role="tablist" aria-label={copy.mobileWorkspace}>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("library")}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={() => { setShowProblemList(true); setShowNotesDrawer(false); setMobileWorkspaceTab("library"); }}>
             <span aria-hidden="true">☷</span>{copy.mobileProblemList}
           </button>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("code")}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => { setShowProblemList(false); setShowNotesDrawer(false); setMobileWorkspaceTab("code"); }}>
             <span aria-hidden="true">{">_"}</span>{copy.mobileCode}
           </button>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={() => setMobileWorkspaceTab("notes")}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={() => { setShowProblemList(false); setShowNotesDrawer(true); setMobileWorkspaceTab("notes"); }}>
             <span aria-hidden="true">✎</span>{copy.mobileNotes}
           </button>
         </nav>
-        <aside id="mobile-library-panel" role="tabpanel" className={`panel library-panel mobile-workspace-pane ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`} aria-label={libraryTitle}>
+        <aside id="mobile-library-panel" role="tabpanel" className={`panel library-panel mobile-workspace-pane ${ideStyles.libraryDrawer} ${showProblemList ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`} aria-label={libraryTitle}>
+          <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭题目列表" : "Close problem list"} onClick={() => { setShowProblemList(false); setMobileWorkspaceTab("code"); }}>×</button>
           <div className="library-head">
             <div className="section-kicker">LEARNING MAP</div>
             <div className="library-title-row">
@@ -1136,11 +1119,19 @@ export default function Home() {
           </div>
         </aside>
 
-        <section id="mobile-code-panel" role="tabpanel" className={`panel focus-panel mobile-workspace-pane ${mobileWorkspaceTab === "code" ? "is-mobile-active" : ""}`} aria-label={`${currentProblem.title} · Python`}>
-          <article className="problem-brief">
+        <section id="mobile-code-panel" role="tabpanel" className={`panel focus-panel mobile-workspace-pane ${ideStyles.focusPanel} ${mobileWorkspaceTab === "code" ? "is-mobile-active" : ""}`} aria-label={`${currentProblem.title} · Python`}>
+          <article className={`problem-brief ${ideStyles.problemPane}`}>
+            <div className={ideStyles.problemTabs}><span>{language === "zh" ? "题目描述" : "Description"}</span></div>
+            <div className={ideStyles.problemContent}>
             <div className="brief-topline">
-              <span>{nativeApp ? "ALGORITHM 100" : "HOT 100"} / {currentProblem.topic}</span>
-              {!nativeApp && <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/`} target="_blank" rel="noreferrer">{copy.officialProblem}</a>}
+              <span>{nativeApp ? "ALGORITHM 101" : "HOT 100 + EXTRA"} / {currentProblem.topic}</span>
+              {!nativeApp && (
+                <cite className="problem-source">
+                  <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`} target="_blank" rel="noreferrer">
+                    {copy.officialProblem(currentProblem.id, currentProblem.title)}
+                  </a>
+                </cite>
+              )}
             </div>
             <div className="brief-title-row">
               <h2>{currentProblem.id}. {currentProblem.title}</h2>
@@ -1174,7 +1165,19 @@ export default function Home() {
                     </div>
                     <div>
                       <span>{copy.example}</span>
-                      <code>{currentProblem.example}</code>
+                      {currentDetail.examples?.length ? (
+                        <ol className="statement-example-list">
+                          {currentDetail.examples.map((example) => (
+                            <li key={`${example.input}-${example.output}`}>
+                              <div><b>{copy.exampleInput}</b><code>{example.input}</code></div>
+                              <div><b>{copy.exampleOutput}</b><code>{example.output}</code></div>
+                              {example.explanation ? <p><b>{copy.exampleExplanation}</b>{example.explanation}</p> : null}
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <code>{currentProblem.example}</code>
+                      )}
                     </div>
                   </div>
                   <div className="statement-requirements">
@@ -1191,12 +1194,18 @@ export default function Home() {
               <p>{currentProblem.hint}</p>
               <b>{copy.targetComplexity}{currentProblem.complexity}</b>
             </div>
+            </div>
           </article>
 
-          <div className="editor-toolbar">
+          <div className={`editor-toolbar ${ideStyles.editorToolbar}`}>
             <div className="editor-meta">
-              <span className="language-pill">Python 3</span>
-              <span className="shortcut-label">{copy.shortcut}</span>
+              <label className={ideStyles.languageWrap}>
+                <span className="sr-only">{language === "zh" ? "编程语言" : "Programming language"}</span>
+                <select className={ideStyles.languageSelect} value="python" onChange={() => undefined} aria-label={language === "zh" ? "编程语言，目前支持 Python 3" : "Programming language, currently Python 3"}>
+                  <option value="python">Python 3</option>
+                </select>
+              </label>
+              <span className={`shortcut-label ${ideStyles.shortcut}`}>{copy.shortcut}</span>
               <div className="mobile-editor-tools" role="group" aria-label={language === "zh" ? "代码缩进工具" : "Code indentation tools"}>
                 <button type="button" onClick={() => adjustEditorIndent("out")} aria-label={copy.outdent}>←</button>
                 <button type="button" onClick={() => adjustEditorIndent("in")} aria-label={copy.indent}>→</button>
@@ -1207,34 +1216,28 @@ export default function Home() {
               <button className="run-button" type="button" onClick={runTests} disabled={runState.phase === "running"}>
                 <span aria-hidden="true">▶</span>{runState.phase === "running" ? copy.running : copy.run}
               </button>
+              {!nativeApp && (
+                <a className={`${ideStyles.officialButton} ${ideStyles.editorSubmit}`} href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`} target="_blank" rel="noreferrer">
+                  {language === "zh" ? "提交" : "Submit"}<span aria-hidden="true">↗</span>
+                </a>
+              )}
             </div>
           </div>
 
-          <div className="code-editor-wrap">
-            <div className="line-numbers" aria-hidden="true" ref={lineNumbersRef}>
-              {codeLines.map((_, index) => <span key={index}>{index + 1}</span>)}
-            </div>
-            <label className="code-field">
-              <span className="sr-only">{copy.editorLabel}</span>
-              <textarea
-                ref={editorRef}
-                value={currentRecord.code}
-                onChange={(event) => updateEditorCode(event.target.value)}
-                onKeyDown={handleEditorKeyDown}
-                onPaste={handleEditorPaste}
-                onScroll={(event) => {
-                  if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop;
-                }}
-                wrap="off"
-                spellCheck={false}
-                autoCapitalize="off"
-                autoCorrect="off"
-                aria-describedby="editor-help"
-              />
-            </label>
+          <div className={`code-editor-wrap ${ideStyles.editorHost}`}>
+            <LeetCodeCodeEditor
+              key={currentProblem.id}
+              ref={codeEditorRef}
+              value={currentRecord.code}
+              onChange={updateEditorCode}
+              onRun={runTests}
+              fontSize={fontSize}
+              language={language}
+              ariaLabel={copy.editorLabel}
+            />
           </div>
 
-          <section className={`test-console test-${runState.phase}`} aria-live="polite">
+          <section className={`test-console test-${runState.phase} ${ideStyles.testConsole}`} aria-live="polite">
             <div className="console-head">
               <div>
                 <strong>{copy.quickTest}</strong>
@@ -1265,7 +1268,7 @@ export default function Home() {
             </div>
 
             {allQuickTestsPassed && (
-              <button className="next-review-button" type="button" onClick={() => { setNoteTab("review"); setMobileWorkspaceTab("notes"); }}>
+              <button className="next-review-button" type="button" onClick={() => { setNoteTab("review"); setShowNotesDrawer(true); setMobileWorkspaceTab("notes"); }}>
                 {copy.nextReview}
               </button>
             )}
@@ -1276,7 +1279,8 @@ export default function Home() {
           </section>
         </section>
 
-        <aside id="mobile-notes-panel" role="tabpanel" className={`panel notes-panel mobile-workspace-pane ${mobileWorkspaceTab === "notes" ? "is-mobile-active" : ""}`} aria-label={copy.notebookLabel}>
+        <aside id="mobile-notes-panel" role="tabpanel" className={`panel notes-panel mobile-workspace-pane ${ideStyles.notesDrawer} ${showNotesDrawer ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "notes" ? "is-mobile-active" : ""}`} aria-label={copy.notebookLabel}>
+          <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭笔记" : "Close notes"} onClick={() => { setShowNotesDrawer(false); setMobileWorkspaceTab("code"); }}>×</button>
           <div className="notes-head">
             <div>
               <div className="section-kicker">MY NOTEBOOK</div>
@@ -1300,7 +1304,7 @@ export default function Home() {
               <strong>{currentProblem.id}. {currentProblem.title}</strong>
               <span>{copy.difficultyLabels[currentProblem.difficulty]} · {currentProblem.topic}</span>
             </div>
-            <button type="button" onClick={() => setMobileWorkspaceTab("code")}>{copy.viewProblemAndCode}</button>
+            <button type="button" onClick={() => { setShowNotesDrawer(false); setMobileWorkspaceTab("code"); }}>{copy.viewProblemAndCode}</button>
           </div>
 
           {noteTab === "line" ? (

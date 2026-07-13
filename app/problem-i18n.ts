@@ -43,6 +43,7 @@ export function localizeDetail(problem: Problem, language: Language): ProblemDet
     return {
       statement: problemEnglish[problem.id].statement,
       requirements: problemEnglish[problem.id].requirements,
+      examples: problemEnglish[problem.id].examples,
     };
   }
   return problemDetails[problem.id] ?? {

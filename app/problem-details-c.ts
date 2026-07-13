@@ -289,6 +289,23 @@ export const problemDetailsC: Record<number, ProblemDetail> = {
       "结果必须是恰好下一个排列，不能跳过中间可行排列。",
     ],
   },
+  167: {
+    statement:
+      "给定整数数组 numbers 和目标整数 target。numbers 已按非递减顺序排列，请找出两个不同位置，使这两个位置上的数相加恰好等于 target；返回它们从 1 开始计算的位置 [i, j]，并保证 i 小于 j。",
+    examples: [
+      { input: "numbers = [2,7,11,15], target = 9", output: "[1,2]", explanation: "2 + 7 = 9，对应从 1 开始计算的第 1、2 个位置。" },
+      { input: "numbers = [2,3,4], target = 6", output: "[1,3]", explanation: "2 + 4 = 6。" },
+      { input: "numbers = [-1,0], target = -1", output: "[1,2]", explanation: "-1 + 0 = -1。" },
+    ],
+    requirements: [
+      "numbers 的长度在 2 到 30,000 之间，数组按非递减顺序排列。",
+      "numbers 中的每个数以及 target 都在 -1000 到 1000 之间。",
+      "两个位置必须不同，且返回值使用从 1 开始的下标 [i, j]，其中 i < j。",
+      "输入保证恰好存在一组有效答案。",
+      "同一个数组位置不能重复使用。",
+      "解法只能使用常数级额外空间。",
+    ],
+  },
   287: {
     statement:
       "给定一个含 n+1 个整数的数组，其中每个值都位于 1 到 n 之间，并且只有一个数值发生重复。请在不改变数组内容的前提下找出这个重复数。",

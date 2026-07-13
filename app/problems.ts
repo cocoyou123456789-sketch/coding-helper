@@ -78,6 +78,11 @@ export const problems: Problem[] = [
     method: "先排序，枚举第一个数，再用左右指针寻找另外两个数。", params: ["nums"],
     hint: "排序后可以跳过重复值，并根据当前和移动指针。", complexity: "时间 O(n²)，空间 O(1)（不计结果）", functionName: "threeSum",
     tests: [t("两个答案", "sorted([sorted(x) for x in threeSum([-1,0,1,2,-1,-4])])", [[-1,-1,2],[-1,0,1]]), t("无解", "threeSum([0,1,1])", [])] }),
+  q({ id: 167, title: "两数之和 II - 输入有序数组", slug: "two-sum-ii-input-array-is-sorted", topic: "双指针", difficulty: "中等",
+    summary: "在一个按非递减顺序排列的数组中，找到和为目标值的两个数，并返回它们从 1 开始计算的位置。", example: "numbers = [2,7,11,15], target = 9 → [1,2]",
+    method: "用左右指针夹逼：和偏小时左指针右移，和偏大时右指针左移。", params: ["numbers", "target"],
+    hint: "数组已经有序；找到答案后要返回 [left + 1, right + 1]。", complexity: "时间 O(n)，空间 O(1)", functionName: "twoSum",
+    tests: [t("首尾之间找到答案", "twoSum([2,7,11,15], 9)", [1,2]), t("答案跨过中间元素", "twoSum([2,3,4], 6)", [1,3]), t("包含负数", "twoSum([-1,0], -1)", [1,2])] }),
   q({ id: 42, title: "接雨水", slug: "trapping-rain-water", topic: "双指针", difficulty: "困难",
     summary: "根据柱子高度，计算下雨后能够接住的总水量。", example: "[0,1,0,2,1,0,1,3,2,1,2,1] → 6",
     method: "维护左右最高柱，较低一侧可以立即确定当前积水。", params: ["height"],
@@ -598,8 +603,8 @@ export const problems: Problem[] = [
     tests: [t("重复 2", "findDuplicate([1,3,4,2,2])", 2), t("重复 3", "findDuplicate([3,1,3,4,2])", 3)] }),
 ];
 
-if (problems.length !== 100) {
-  throw new Error(`Hot 100 数据应为 100 题，当前为 ${problems.length} 题`);
+if (problems.length !== 101) {
+  throw new Error(`Hot 100 加练题数据应为 101 题，当前为 ${problems.length} 题`);
 }
 
 export const officialProblemUrl = (problem: Pick<Problem, "slug">): string =>

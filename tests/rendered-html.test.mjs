@@ -44,7 +44,7 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
-test("ships 100 problems, course dictation, the Python runner, and Pages workflow", async () => {
+test("ships Hot 100 plus an extra problem, course dictation, the Python runner, and Pages workflow", async () => {
   const [problemSource, pageSource, courseSource, speechSource, pwaSource, detailA, detailB, detailC, englishA, englishB, englishC, workerSource, serviceWorkerSource, manifestSource, workflowSource] = await Promise.all([
     readFile(new URL("../app/problems.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -64,23 +64,27 @@ test("ships 100 problems, course dictation, the Python runner, and Pages workflo
   ]);
   const manifest = JSON.parse(manifestSource);
 
-  assert.equal((problemSource.match(/\bq\(\{ id:/g) ?? []).length, 100);
-  assert.equal(([detailA, detailB, detailC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 100);
-  assert.equal(([englishA, englishB, englishC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 100);
+  assert.equal((problemSource.match(/\bq\(\{ id:/g) ?? []).length, 101);
+  assert.equal(([detailA, detailB, detailC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 101);
+  assert.equal(([englishA, englishB, englishC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 101);
   assert.match(englishA, /title: "Two Sum"/);
   assert.match(problemSource, /id: 32, title: "最长有效括号"/);
+  assert.match(problemSource, /id: 167, title: "两数之和 II - 输入有序数组"/);
+  assert.match(detailC, /^  167: \{/m);
+  assert.match(englishC, /^  167: \{/m);
   assert.match(pageSource, /运行测试/);
   assert.match(pageSource, /逐行解释|每一行代码是什么意思/);
-  assert.match(pageSource, /在力扣查看官方原题/);
+  assert.match(pageSource, /来源：LeetCode/);
+  assert.match(pageSource, /currentDetail\.examples/);
   assert.match(pageSource, /完整题目练习工作台/);
   assert.match(pageSource, /原题 \+ 代码/);
   assert.match(pageSource, /mobile-notes-context/);
   assert.match(pageSource, /app-mode-nav/);
   assert.match(pageSource, /测试通过，下一步：写复盘/);
   assert.match(pageSource, /mobile-workspace-tabs/);
-  assert.match(pageSource, /wrap="off"/);
-  assert.match(pageSource, /Enter 自动缩进/);
-  assert.match(pageSource, /editForEnter/);
+  assert.match(pageSource, /LeetCodeCodeEditor/);
+  assert.match(pageSource, /去 LeetCode 提交/);
+  assert.match(pageSource, /practice-ide\.module\.css/);
   assert.match(pageSource, /课程笔记/);
   assert.match(pageSource, /CourseNotes/);
   assert.match(courseSource, /加载官方课程播放器/);

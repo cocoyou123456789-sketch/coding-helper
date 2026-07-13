@@ -1,3 +1,5 @@
+import type { ProblemExample } from "./problem-detail-types";
+
 export interface ProblemEnglishCopy {
   title: string;
   topic: string;
@@ -8,4 +10,5 @@ export interface ProblemEnglishCopy {
   complexity: string;
   statement: string;
   requirements: string[];
+  examples?: ProblemExample[];
 }
