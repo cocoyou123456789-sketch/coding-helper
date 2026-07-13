@@ -1,11 +1,13 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import backupStyles from "./backup-settings.module.css";
 import {
   syncLineNotes,
   type LineNoteEdit,
 } from "./code-editor";
-import { COURSE_NOTES_STORAGE_KEY } from "./course-notes-model";
+import { COURSE_NOTES_STORAGE_KEY, normalizeCourseStore } from "./course-notes-model";
+import { drainCourseStoreWrites, latestCourseStoreSnapshot } from "./course-storage";
 import headerStyles from "./header.module.css";
 import type { LeetCodeCodeEditorHandle } from "./leetcode-code-editor";
 import LearningHub, { type LearningProfile } from "./learning-hub";
@@ -17,24 +19,56 @@ import {
 } from "./navigation-state";
 import {
   clearStoredStudyData,
+  cancelReminderAfterRestore,
+  captureMountedStudyData,
   configureNativeAppearance,
+  exportStudyBackupFile,
+  flushMountedStudyData,
+  getLargeStoredValue,
   getStoredValue,
   isNativeAppBuild,
   loadDailyReminder,
   openExternalPage,
   playSelectionHaptic,
   playTestHaptic,
+  pauseMountedStudyData,
+  resumeMountedStudyData,
   saveDailyReminder,
   setStoredValue,
   shareStudyNote,
+  writeStoredStudySnapshot,
   type DailyReminder,
   type ReminderSaveResult,
+  type StoredStudySnapshot,
 } from "./native-app";
 import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
 import { beginnerPythonErrorHint, messageBelongsToRun, solutionErrorLine, untouchedStarterLine } from "./run-session";
+import {
+  createStudyBackup,
+  MAX_STUDY_BACKUP_BYTES,
+  parseStudyBackup,
+  restoreStudySnapshot,
+  stringifyStudyBackup,
+  StudyBackupError,
+  type StudyBackup,
+} from "./study-backup";
+import {
+  advanceStudyDataRevision,
+  assertStudyDataSessionCurrent,
+  hasOtherActiveStudyTab,
+  registerStudyDataTab,
+  StudyDataLockUnavailableError,
+  STUDY_DATA_STALE_EVENT,
+  supportsSafeStudyDataWrites,
+  withExclusiveStudyDataOperation,
+  withInitialStudyDataReadLock,
+  withStudyDataReadLock,
+  withStudyDataRescueReadLock,
+  withStudyDataWriteLock,
+} from "./study-data-session";
 import {
   STUDY_STORAGE_VERSION,
   normalizeLearningProfile,
@@ -74,6 +108,8 @@ type RunState =
   | { phase: "done"; message: string; results: WorkerTestResult[]; duration: number; stdout: string }
   | { phase: "error"; message: string; results: WorkerTestResult[]; stdout?: string };
 
+type BackupOperation = "idle" | "exporting" | "checking" | "restoring";
+
 const STORAGE_KEY = "leetcode-hot100-study-notebook-v1";
 const FONT_SIZE_KEY = "leetcode-hot100-font-size-v1";
 const PROFILE_KEY = "leetcode-hot100-learning-profile-v1";
@@ -101,6 +137,18 @@ function replaceNavigationState(nextNavigation: NavigationState) {
   writeNavigationState(nextNavigation, "replace");
 }
 
+function queueStorageWrite(
+  queue: { current: Promise<void> },
+  operation: () => Promise<void>,
+): Promise<void> {
+  const pending = queue.current.catch(() => undefined).then(() => withStudyDataWriteLock(async () => {
+    advanceStudyDataRevision();
+    await operation();
+  }));
+  queue.current = pending;
+  return pending;
+}
+
 const EMPTY_PROFILE: LearningProfile = {
   xp: 0,
   todayXp: 0,
@@ -121,6 +169,14 @@ const pageCopy = {
     saving: "正在保存…",
     saveFailed: "保存失败，请先复制重要笔记",
     saveRecovery: "浏览器没有保存刚才的更改。请先复制重要笔记，并清理一些本机存储空间。",
+    storageLoadFailed: "暂时无法安全读取这台设备上的学习记录。为防止覆盖原笔记，本页已停止保存。请重新加载后再试。",
+    retryLoad: "重新加载",
+    readOnlyTitle: "当前浏览器为只读模式",
+    readOnlyBody: "这个浏览器版本缺少安全保存所需的标签页锁。为避免覆盖笔记，本页只允许导出备份；请升级 Safari、Chrome 或 Edge 后再编辑。",
+    staleTitle: "学习记录已在另一个标签页更新",
+    staleBody: "本页已停止编辑，防止覆盖新记录。若这里还有未保存内容，请先导出救援备份，再重新加载。",
+    rescueBackup: "导出本页救援备份",
+    rescueBackupDone: "救援备份已导出，请保存好文件后重新加载。",
     freePractice: "完整题练习",
     learningPath: "学习首页",
     courseNotes: "课程笔记",
@@ -228,9 +284,10 @@ const pageCopy = {
       ["写下复盘", "解释关键代码和错误原因，下次更容易认出来。"],
     ],
     goToPath: "去学习路径",
+    settings: "设置",
     studyReminder: "学习提醒",
-    nativeSettingsTitle: "我的学习提醒",
-    nativeSettingsBody: "选择一个适合你的时间。提醒由手机本地发送，不需要注册账号。",
+    nativeSettingsTitle: "设置与本机数据",
+    nativeSettingsBody: "代码、笔记和进度默认只保存在这台设备，不需要注册账号。",
     reminderEnabled: "每天提醒我学习",
     reminderTime: "提醒时间",
     reminderOffline: "Python 运行环境已随 App 安装，断网也可以写代码和运行测试。",
@@ -242,6 +299,35 @@ const pageCopy = {
     reminderDenied: "通知权限没有开启，可以稍后在 iPhone 设置中允许通知。",
     reminderUnsupported: "当前环境不支持手机提醒。",
     reminderError: "提醒暂时没有保存成功，请稍后重试。",
+    fullBackup: "完整备份",
+    backupBody: "导出代码、逐行解释、复盘、课程听写、学习进度和偏好设置。",
+    exportBackup: "导出备份",
+    restoreBackup: "从文件恢复",
+    backupPrivacy: "备份文件是可阅读的明文，包含你的代码、课程链接、听写文字和笔记。只保存到你信任的位置；题解簿不会上传它。",
+    backupPreparing: "正在整理备份…",
+    backupDownloaded: "备份已下载。",
+    backupShared: "已打开分享菜单，请选择“存储到文件”或其他可信位置。",
+    backupFailed: "备份没有导出成功，请检查本机存储空间后重试。",
+    otherTabOpen: "另一个题解簿标签页正在打开。请先关闭它，再导出、恢复或删除，避免覆盖笔记。",
+    dataChangedOtherTab: "学习数据已在另一个标签页改变。请重新加载本页后继续。",
+    safeRestoreUnavailable: "当前浏览器无法安全锁定多个标签页。请使用最新版 Safari、Chrome 或 Edge 后再恢复或删除。",
+    backupChecking: "正在检查备份…",
+    backupReady: "备份已检查，请确认是否替换本机数据。",
+    backupInvalid: "这不是可用的题解簿备份文件，本机数据没有改变。",
+    backupTooLarge: "备份内容超过 24 MB，或有单项笔记过长，无法在不丢内容的情况下处理。",
+    backupNewer: "此备份来自更新版本，请先更新题解簿。",
+    reviewBackup: "检查备份",
+    backupCreated: "备份时间",
+    backupContains: (problems: number, courses: number, xp: number) => `包含：${problems} 道题的学习记录 · ${courses} 节课程 · ${xp} XP`,
+    currentContains: (problems: number, courses: number) => `本机当前：${problems} 道题的学习记录 · ${courses} 节课程`,
+    restoreWarning: "恢复会替换这台设备现有的全部学习数据，不会合并。导入的学习提醒默认关闭。",
+    exportCurrentFirst: "先导出本机数据",
+    cancelRestore: "取消",
+    confirmRestore: "替换并恢复",
+    restoringBackup: "正在恢复，请不要关闭页面…",
+    restoreSuccess: (problems: number, courses: number) => `恢复完成：${problems} 道题、${courses} 节课程。正在重新打开…`,
+    restoreRolledBack: "恢复失败，本机原数据已还原。请检查存储空间后再试。",
+    restoreRollbackFailed: "恢复未完成，部分数据可能已改变。请保留备份文件并重新打开后再试。",
     shareNotes: "分享笔记",
     shareSuccess: "已打开分享菜单。",
     shareCopied: "笔记已复制。",
@@ -252,7 +338,10 @@ const pageCopy = {
     licenses: "开源许可",
     deleteData: "删除本机学习数据",
     deleteConfirm: "确定删除这台设备上的全部代码、笔记、进度和提醒吗？这个操作无法撤销。",
+    deletingData: "正在删除本机学习数据…",
     deleteDone: "本机学习数据已删除。",
+    deleteReminderWarning: "学习数据已删除，但系统提醒可能仍存在。请在 iPhone 设置 → 通知 → 题解簿中关闭它。",
+    deleteFailed: "删除没有完成，请检查本机存储空间后重试。",
   },
   en: {
     brandName: "AlgoQuest",
@@ -264,6 +353,14 @@ const pageCopy = {
     saving: "Saving…",
     saveFailed: "Save failed — copy important notes now",
     saveRecovery: "Your latest change was not saved. Copy important notes now and free some storage on this device.",
+    storageLoadFailed: "Study data could not be read safely, so saving is paused to protect your existing notes. Reload and try again.",
+    retryLoad: "Reload",
+    readOnlyTitle: "This browser is in read-only mode",
+    readOnlyBody: "This browser version lacks the tab lock required for safe saving. To protect your notes, this page only allows backup export; update Safari, Chrome, or Edge before editing.",
+    staleTitle: "Study data changed in another tab",
+    staleBody: "Editing is paused so this tab cannot overwrite newer work. If this tab has unsaved work, export a rescue backup before reloading.",
+    rescueBackup: "Export this tab’s rescue backup",
+    rescueBackupDone: "Rescue backup exported. Keep the file, then reload this tab.",
     freePractice: "Full Practice",
     learningPath: "Study Home",
     courseNotes: "Course Notes",
@@ -371,9 +468,10 @@ const pageCopy = {
       ["Write a review", "Explain key lines and mistakes so the pattern is easier next time."],
     ],
     goToPath: "Go to learning path",
+    settings: "Settings",
     studyReminder: "Study reminder",
-    nativeSettingsTitle: "My study reminder",
-    nativeSettingsBody: "Pick a time that works for you. The reminder is scheduled locally on this device; no account is required.",
+    nativeSettingsTitle: "Settings & on-device data",
+    nativeSettingsBody: "Code, notes, and progress stay on this device by default. No account is required.",
     reminderEnabled: "Remind me every day",
     reminderTime: "Reminder time",
     reminderOffline: "Python is bundled with the app, so you can write code and run tests offline.",
@@ -385,6 +483,35 @@ const pageCopy = {
     reminderDenied: "Notifications are not allowed. You can enable them later in iPhone Settings.",
     reminderUnsupported: "Study reminders are not supported in this environment.",
     reminderError: "The reminder could not be saved. Please try again.",
+    fullBackup: "Full backup",
+    backupBody: "Export your code, line explanations, reviews, course transcripts, progress, and preferences.",
+    exportBackup: "Export backup",
+    restoreBackup: "Restore from file",
+    backupPrivacy: "Backup files are readable plain text and include your code, course links, transcripts, and notes. Save them only in a trusted location; AlgoQuest never uploads them.",
+    backupPreparing: "Preparing backup…",
+    backupDownloaded: "Backup downloaded.",
+    backupShared: "The share sheet is open. Choose Save to Files or another trusted location.",
+    backupFailed: "The backup could not be exported. Check device storage and try again.",
+    otherTabOpen: "AlgoQuest is open in another tab. Close that tab before exporting, restoring, or deleting so notes are not overwritten.",
+    dataChangedOtherTab: "Study data changed in another tab. Reload this page before continuing.",
+    safeRestoreUnavailable: "This browser cannot safely lock study data across tabs. Use a current Safari, Chrome, or Edge before restoring or deleting.",
+    backupChecking: "Checking backup…",
+    backupReady: "Backup checked. Review it before replacing on-device data.",
+    backupInvalid: "This is not a usable AlgoQuest backup. On-device data was not changed.",
+    backupTooLarge: "This backup exceeds 24 MB, or one saved item is too long to process without losing content.",
+    backupNewer: "This backup was made by a newer version. Update AlgoQuest first.",
+    reviewBackup: "Review backup",
+    backupCreated: "Backup created",
+    backupContains: (problems: number, courses: number, xp: number) => `Contains: ${problems} problem records · ${courses} courses · ${xp} XP`,
+    currentContains: (problems: number, courses: number) => `On this device: ${problems} problem records · ${courses} courses`,
+    restoreWarning: "Restoring replaces all study data on this device. It will not merge the two sets. Imported reminders stay off.",
+    exportCurrentFirst: "Export current data first",
+    cancelRestore: "Cancel",
+    confirmRestore: "Replace & restore",
+    restoringBackup: "Restoring — keep this page open…",
+    restoreSuccess: (problems: number, courses: number) => `Restored ${problems} problem records and ${courses} courses. Reopening…`,
+    restoreRolledBack: "Restore failed, and the original on-device data was restored. Check storage space and try again.",
+    restoreRollbackFailed: "Restore did not finish and some data may have changed. Keep the backup file and reopen the app before trying again.",
     shareNotes: "Share notes",
     shareSuccess: "The share sheet is open.",
     shareCopied: "Notes copied.",
@@ -395,7 +522,10 @@ const pageCopy = {
     licenses: "Open-source licenses",
     deleteData: "Delete on-device study data",
     deleteConfirm: "Delete all code, notes, progress, and reminders stored on this device? This cannot be undone.",
+    deletingData: "Deleting on-device study data…",
     deleteDone: "On-device study data deleted.",
+    deleteReminderWarning: "Study data was deleted, but a system reminder may remain. Turn it off in iPhone Settings → Notifications → AlgoQuest.",
+    deleteFailed: "Deletion did not finish. Check device storage and try again.",
   },
 } as const;
 
@@ -535,6 +665,9 @@ export default function Home() {
   const [activeCodeLine, setActiveCodeLine] = useState(1);
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
   const [hydrated, setHydrated] = useState(false);
+  const [storageLoadFailed, setStorageLoadFailed] = useState(false);
+  const [storageReadOnly, setStorageReadOnly] = useState(false);
+  const [staleStudyData, setStaleStudyData] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showGuide, setShowGuide] = useState(false);
   const [showStatement, setShowStatement] = useState(true);
@@ -549,24 +682,49 @@ export default function Home() {
   const [reminderSaving, setReminderSaving] = useState(false);
   const [reminderMessage, setReminderMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
+  const [backupOperation, setBackupOperation] = useState<BackupOperation>("idle");
+  const [backupMessage, setBackupMessage] = useState("");
+  const [backupMessageIsError, setBackupMessageIsError] = useState(false);
+  const [pendingBackup, setPendingBackup] = useState<StudyBackup | null>(null);
+  const [currentCourseCount, setCurrentCourseCount] = useState(0);
   const workerRef = useRef<Worker | null>(null);
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runSequenceRef = useRef(0);
   const saveSequenceRef = useRef(0);
+  const dataOperationRef = useRef(false);
+  const dataStaleRef = useRef(false);
+  const staleCapturePromiseRef = useRef<Promise<Record<string, string>> | null>(null);
+  const storageWritesRef = useRef<Promise<void>>(Promise.resolve());
+  const queuedStudyValueRef = useRef<string | null>(null);
+  const queuedFontValueRef = useRef<string | null>(null);
+  const queuedProfileValueRef = useRef<string | null>(null);
+  const queuedLanguageValueRef = useRef<string | null>(null);
   const activeRunRef = useRef<{ id: string; cleanup: () => void } | null>(null);
   const codeEditorRef = useRef<LeetCodeCodeEditorHandle | null>(null);
   const problemMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const notesButtonRef = useRef<HTMLButtonElement | null>(null);
   const libraryDrawerRef = useRef<HTMLElement | null>(null);
   const notesDrawerRef = useRef<HTMLElement | null>(null);
-  const nativeSettingsDialogRef = useDialogFocus<HTMLElement>(showNativeSettings, () => setShowNativeSettings(false));
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupReviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const restoreBackupButtonRef = useRef<HTMLButtonElement | null>(null);
+  const backupBusy = backupOperation !== "idle";
+  const settingsBusy = backupBusy || reminderSaving;
+  const studyEditingBlocked = storageReadOnly || staleStudyData;
+  const nativeSettingsDialogRef = useDialogFocus<HTMLElement>(showNativeSettings, () => {
+    if (!settingsBusy) setShowNativeSettings(false);
+  });
   const guideDialogRef = useDialogFocus<HTMLElement>(showGuide, () => setShowGuide(false));
 
   const copy = pageCopy[language];
   const brandSubtitle = nativeApp ? copy.nativeBrandSubtitle : copy.brandSubtitle;
   const autosaveLabel = nativeApp ? copy.nativeAutosave : copy.autosave;
-  const visibleSaveLabel = saveState === "saving" ? copy.saving : saveState === "error" ? copy.saveFailed : autosaveLabel;
+  const visibleSaveLabel = staleStudyData
+    ? copy.staleTitle
+    : storageReadOnly
+      ? copy.readOnlyTitle
+      : saveState === "saving" ? copy.saving : saveState === "error" ? copy.saveFailed : autosaveLabel;
   const libraryTitle = nativeApp ? copy.nativeLibraryTitle : copy.libraryTitle;
   const statementNote = nativeApp ? copy.nativeStatementNote : copy.statementNote;
   const testHelp = nativeApp ? copy.nativeTestHelp : copy.testHelp;
@@ -633,25 +791,31 @@ export default function Home() {
           if (requestedNavigation.problemId) setSelectedId(requestedNavigation.problemId);
         }
 
-        await configureNativeAppearance();
-        const [savedLanguage, saved, savedFontSizeValue, savedProfile, savedReminder] = await Promise.all([
-          getStoredValue(LANGUAGE_KEY),
-          getStoredValue(STORAGE_KEY),
-          getStoredValue(FONT_SIZE_KEY),
-          getStoredValue(PROFILE_KEY),
-          loadDailyReminder(),
-        ]);
+        const [savedLanguage, saved, savedFontSizeValue, savedProfile, savedReminder] = await withInitialStudyDataReadLock(async () => {
+          await configureNativeAppearance();
+          return Promise.all([
+            getStoredValue(LANGUAGE_KEY),
+            getStoredValue(STORAGE_KEY),
+            getStoredValue(FONT_SIZE_KEY),
+            getStoredValue(PROFILE_KEY),
+            loadDailyReminder(),
+          ]);
+        });
         if (cancelled) return;
+        if (dataOperationRef.current) return;
 
+        const resolvedLanguage: Language = savedLanguage === "en" ? "en" : "zh";
         if (savedLanguage === "zh" || savedLanguage === "en") {
-          setLanguage(savedLanguage);
-          setRunState({ phase: "idle", message: pageCopy[savedLanguage].notRun, results: [] });
+          setLanguage(resolvedLanguage);
+          setRunState({ phase: "idle", message: pageCopy[resolvedLanguage].notRun, results: [] });
         }
         requestedNavigation = parseNavigationState(window.location.search, KNOWN_PROBLEM_IDS);
         let savedSelectedId: number | undefined;
+        let loadedRecords: StudyRecords = {};
         if (saved) {
           const normalized = normalizeSavedStudy(parseStoredJson(saved), problems);
-          setRecords(normalized.records);
+          loadedRecords = normalized.records;
+          setRecords(loadedRecords);
           savedSelectedId = normalized.selectedId;
         }
         const resolvedSelectedId = requestedNavigation.mode === "workspace" && requestedNavigation.problemId
@@ -663,22 +827,40 @@ export default function Home() {
           problemId: requestedNavigation.mode === "workspace" ? resolvedSelectedId : undefined,
         });
         const savedFontSize = Number(savedFontSizeValue);
+        let resolvedFontSize = DEFAULT_FONT_SIZE;
         if (Number.isInteger(savedFontSize) && savedFontSize >= MIN_FONT_SIZE && savedFontSize <= MAX_FONT_SIZE) {
-          setFontSize(savedFontSize);
+          resolvedFontSize = savedFontSize;
+          setFontSize(resolvedFontSize);
         }
+        let loadedProfile = EMPTY_PROFILE;
         if (savedProfile) {
           const loaded = normalizeLearningProfile(parseStoredJson(savedProfile));
           if (loaded.todayDate !== localDateKey()) {
             loaded.todayXp = 0;
             if (loaded.todayDate !== yesterdayKey()) loaded.streak = 0;
           }
+          loadedProfile = loaded;
           setProfile(loaded);
         }
         setDailyReminder(savedReminder);
+        queuedStudyValueRef.current = JSON.stringify({
+          version: STUDY_STORAGE_VERSION,
+          records: loadedRecords,
+          selectedId: resolvedSelectedId,
+        });
+        queuedFontValueRef.current = String(resolvedFontSize);
+        queuedProfileValueRef.current = JSON.stringify(loadedProfile);
+        queuedLanguageValueRef.current = resolvedLanguage;
+        if (!supportsSafeStudyDataWrites()) {
+          dataOperationRef.current = true;
+          setStorageReadOnly(true);
+        }
+        setHydrated(true);
       } catch {
-        // A damaged local note should not stop the site from opening.
-      } finally {
-        if (!cancelled) setHydrated(true);
+        if (cancelled) return;
+        dataOperationRef.current = true;
+        setStorageLoadFailed(true);
+        setSaveState("error");
       }
     }
 
@@ -687,6 +869,38 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let unregister: () => void = () => undefined;
+    try {
+      unregister = registerStudyDataTab();
+    } catch {
+      dataOperationRef.current = true;
+      const failureTimer = window.setTimeout(() => {
+        setStorageLoadFailed(true);
+        setHydrated(false);
+        setSaveState("error");
+      }, 0);
+      return () => window.clearTimeout(failureTimer);
+    }
+    const handleStaleStudyData = () => {
+      if (dataStaleRef.current) return;
+      staleCapturePromiseRef.current = captureMountedStudyData().catch(() => ({}));
+      dataStaleRef.current = true;
+      setStaleStudyData(true);
+      dataOperationRef.current = true;
+      saveSequenceRef.current += 1;
+      pauseMountedStudyData();
+      setSaveState("error");
+      setBackupMessageIsError(true);
+      setBackupMessage(copy.dataChangedOtherTab);
+    };
+    window.addEventListener(STUDY_DATA_STALE_EVENT, handleStaleStudyData);
+    return () => {
+      window.removeEventListener(STUDY_DATA_STALE_EVENT, handleStaleStudyData);
+      unregister();
+    };
+  }, [copy.dataChangedOtherTab]);
 
   useEffect(() => {
     function restoreNavigationFromHistory() {
@@ -724,14 +938,21 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || dataOperationRef.current) return;
+    const serialized = JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId });
+    if (serialized === queuedStudyValueRef.current) return;
+    queuedStudyValueRef.current = serialized;
     const sequence = ++saveSequenceRef.current;
     let cancelled = false;
     const savingTimer = window.setTimeout(() => {
+      if (dataOperationRef.current) return;
       if (saveSequenceRef.current === sequence) setSaveState("saving");
     }, 0);
     const timer = window.setTimeout(() => {
-      void persistWithStatus(() => setStoredValue(STORAGE_KEY, JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId })))
+      if (dataOperationRef.current) return;
+      void persistWithStatus(() => queueStorageWrite(storageWritesRef, async () => {
+        await setStoredValue(STORAGE_KEY, serialized);
+      }))
         .then((result) => {
           if (!cancelled && saveSequenceRef.current === sequence) setSaveState(result);
         });
@@ -745,13 +966,23 @@ export default function Home() {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
-    if (!hydrated) return;
-    void persistWithStatus(() => setStoredValue(FONT_SIZE_KEY, String(fontSize)));
+    if (!hydrated || dataOperationRef.current) return;
+    const serialized = String(fontSize);
+    if (serialized === queuedFontValueRef.current) return;
+    queuedFontValueRef.current = serialized;
+    void persistWithStatus(() => queueStorageWrite(storageWritesRef, async () => {
+      await setStoredValue(FONT_SIZE_KEY, serialized);
+    }));
   }, [fontSize, hydrated]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    void persistWithStatus(() => setStoredValue(PROFILE_KEY, JSON.stringify(profile)));
+    if (!hydrated || dataOperationRef.current) return;
+    const serialized = JSON.stringify(profile);
+    if (serialized === queuedProfileValueRef.current) return;
+    queuedProfileValueRef.current = serialized;
+    void persistWithStatus(() => queueStorageWrite(storageWritesRef, async () => {
+      await setStoredValue(PROFILE_KEY, serialized);
+    }));
   }, [hydrated, profile]);
 
   useEffect(() => {
@@ -759,8 +990,12 @@ export default function Home() {
     document.title = nativeApp
       ? (language === "zh" ? "题解簿｜算法学习手账" : "AlgoQuest | Algorithm Study Notebook")
       : (language === "zh" ? "题解簿｜LeetCode Hot 100 小白学习工作台" : "AlgoQuest | LeetCode Hot 100 Learning Path");
-    if (!hydrated) return;
-    void persistWithStatus(() => setStoredValue(LANGUAGE_KEY, language));
+    if (!hydrated || dataOperationRef.current) return;
+    if (language === queuedLanguageValueRef.current) return;
+    queuedLanguageValueRef.current = language;
+    void persistWithStatus(() => queueStorageWrite(storageWritesRef, async () => {
+      await setStoredValue(LANGUAGE_KEY, language);
+    }));
   }, [hydrated, language, nativeApp]);
 
   useEffect(() => {
@@ -980,9 +1215,21 @@ export default function Home() {
   }
 
   async function handleSaveReminder() {
+    if (backupBusy) return;
     setReminderSaving(true);
     setReminderMessage("");
-    const result = await saveDailyReminder(dailyReminder, language);
+    let result: ReminderSaveResult = "error";
+    try {
+      result = await withStudyDataWriteLock(async () => {
+        const saved = await saveDailyReminder(dailyReminder, language);
+        if (saved === "scheduled" || saved === "disabled" || saved === "denied") {
+          advanceStudyDataRevision();
+        }
+        return saved;
+      });
+    } catch {
+      result = "error";
+    }
     if (result === "denied") setDailyReminder((current) => ({ ...current, enabled: false }));
     setReminderMessage(reminderResultMessage(result));
     setReminderSaving(false);
@@ -1021,20 +1268,244 @@ export default function Home() {
     setShareMessage(result === "shared" ? copy.shareSuccess : result === "copied" ? copy.shareCopied : copy.shareUnavailable);
   }
 
+  function currentStoredSnapshot(courseValue: string): StoredStudySnapshot {
+    return {
+      values: {
+        [STORAGE_KEY]: JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId }),
+        [PROFILE_KEY]: JSON.stringify(profile),
+        [FONT_SIZE_KEY]: String(fontSize),
+        [LANGUAGE_KEY]: language,
+      },
+      largeValues: { [COURSE_NOTES_STORAGE_KEY]: courseValue },
+      reminder: dailyReminder,
+    };
+  }
+
+  function importedStoredSnapshot(backup: StudyBackup): StoredStudySnapshot {
+    return {
+      values: {
+        [STORAGE_KEY]: JSON.stringify(backup.study),
+        [PROFILE_KEY]: JSON.stringify(backup.profile),
+        [FONT_SIZE_KEY]: String(backup.font),
+        [LANGUAGE_KEY]: backup.language,
+      },
+      largeValues: { [COURSE_NOTES_STORAGE_KEY]: JSON.stringify(backup.course) },
+      reminder: backup.reminder,
+    };
+  }
+
+  function backupFromCourseValue(courseValue: string | null): StudyBackup {
+    return createStudyBackup({
+      study: { version: STUDY_STORAGE_VERSION, records, selectedId },
+      profile,
+      font: fontSize,
+      language,
+      reminder: dailyReminder,
+      course: parseStoredJson(courseValue),
+    }, problems);
+  }
+
+  function backupErrorMessage(error: unknown): string {
+    if (!(error instanceof StudyBackupError)) return copy.backupInvalid;
+    if (error.code === "too-large") return copy.backupTooLarge;
+    if (error.code === "unsupported-version") return copy.backupNewer;
+    return copy.backupInvalid;
+  }
+
+  async function ensureSingleStudyTab(): Promise<boolean> {
+    try {
+      assertStudyDataSessionCurrent();
+    } catch {
+      setBackupMessageIsError(true);
+      setBackupMessage(copy.dataChangedOtherTab);
+      return false;
+    }
+    if (!await hasOtherActiveStudyTab()) return true;
+    setBackupMessageIsError(true);
+    setBackupMessage(copy.otherTabOpen);
+    return false;
+  }
+
+  async function handleExportBackup() {
+    if (!hydrated || settingsBusy) return;
+    const rescueMode = dataStaleRef.current;
+    setBackupOperation("exporting");
+    setBackupMessageIsError(false);
+    setBackupMessage(copy.backupPreparing);
+    try {
+      if (!rescueMode && !await ensureSingleStudyTab()) return;
+      await storageWritesRef.current.catch(() => undefined);
+      const mountedValues = rescueMode
+        ? await (staleCapturePromiseRef.current ?? Promise.resolve<Record<string, string>>({}))
+        : await captureMountedStudyData();
+      await drainCourseStoreWrites().catch(() => undefined);
+      const courseValue = mountedValues[COURSE_NOTES_STORAGE_KEY]
+        ?? latestCourseStoreSnapshot()
+        ?? (rescueMode
+          ? await withStudyDataRescueReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY))
+          : await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY)));
+      const backup = backupFromCourseValue(courseValue);
+      const result = await exportStudyBackupFile(
+        `tijiebu-${rescueMode ? "rescue" : "backup"}-${backup.exportedAt.slice(0, 10)}.json`,
+        stringifyStudyBackup(backup),
+      );
+      setBackupMessage(rescueMode
+        ? copy.rescueBackupDone
+        : result === "shared" ? copy.backupShared : copy.backupDownloaded);
+      void playTestHaptic(true);
+    } catch (error) {
+      setBackupMessageIsError(true);
+      setBackupMessage(error instanceof StudyBackupError ? backupErrorMessage(error) : copy.backupFailed);
+    } finally {
+      setBackupOperation("idle");
+    }
+  }
+
+  async function handleBackupFile(event: ReactChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || !hydrated || settingsBusy) return;
+    setPendingBackup(null);
+    setBackupOperation("checking");
+    setBackupMessageIsError(false);
+    setBackupMessage(copy.backupChecking);
+    try {
+      if (file.size > MAX_STUDY_BACKUP_BYTES) {
+        throw new StudyBackupError("too-large", "Backup file is too large.");
+      }
+      const backup = parseStudyBackup(await file.text(), problems);
+      const mountedValues = await captureMountedStudyData();
+      await drainCourseStoreWrites().catch(() => undefined);
+      const currentCourseValue = mountedValues[COURSE_NOTES_STORAGE_KEY]
+        ?? latestCourseStoreSnapshot()
+        ?? await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY));
+      setCurrentCourseCount(normalizeCourseStore(parseStoredJson(currentCourseValue)).courses.length);
+      setPendingBackup(backup);
+      setBackupMessage(copy.backupReady);
+      window.requestAnimationFrame(() => backupReviewHeadingRef.current?.focus());
+    } catch (error) {
+      setBackupMessageIsError(true);
+      setBackupMessage(backupErrorMessage(error));
+      window.requestAnimationFrame(() => restoreBackupButtonRef.current?.focus());
+    } finally {
+      setBackupOperation("idle");
+    }
+  }
+
+  async function handleRestoreBackup() {
+    if (!pendingBackup || !hydrated || settingsBusy) return;
+    const backup = pendingBackup;
+    let paused = false;
+
+    setBackupOperation("restoring");
+    setBackupMessageIsError(false);
+    setBackupMessage(copy.restoringBackup);
+    try {
+      if (!await ensureSingleStudyTab()) {
+        setBackupOperation("idle");
+        return;
+      }
+      dataOperationRef.current = true;
+      saveSequenceRef.current += 1;
+      await storageWritesRef.current;
+      await flushMountedStudyData();
+      await drainCourseStoreWrites();
+      pauseMountedStudyData();
+      paused = true;
+      const restoreResult = await withExclusiveStudyDataOperation(async () => {
+        advanceStudyDataRevision();
+        const previousCourseValue = await getLargeStoredValue(COURSE_NOTES_STORAGE_KEY)
+          ?? JSON.stringify(normalizeCourseStore(undefined));
+        return restoreStudySnapshot(
+          importedStoredSnapshot(backup),
+          currentStoredSnapshot(previousCourseValue),
+          {
+            write: writeStoredStudySnapshot,
+            finalize: cancelReminderAfterRestore,
+          },
+        );
+      });
+      if (!restoreResult.restored) {
+        setBackupMessageIsError(true);
+        if (restoreResult.rolledBack) {
+          dataOperationRef.current = false;
+          resumeMountedStudyData();
+          paused = false;
+          setSaveState("saved");
+          setBackupOperation("idle");
+          setBackupMessage(copy.restoreRolledBack);
+        } else {
+          setBackupMessage(copy.restoreRollbackFailed);
+          window.setTimeout(() => window.location.reload(), 1800);
+        }
+        return;
+      }
+
+      replaceNavigationState({ mode: "path" });
+      setBackupMessage(copy.restoreSuccess(
+        Object.keys(backup.study.records).length,
+        backup.course.courses.length,
+      ));
+      void playTestHaptic(true);
+      window.setTimeout(() => window.location.reload(), 650);
+    } catch (error) {
+      if (!dataStaleRef.current) {
+        dataOperationRef.current = false;
+        if (paused) resumeMountedStudyData();
+        setSaveState("saved");
+      }
+      setBackupOperation("idle");
+      setBackupMessageIsError(true);
+      setBackupMessage(dataStaleRef.current
+        ? copy.dataChangedOtherTab
+        : error instanceof StudyDataLockUnavailableError
+          ? copy.safeRestoreUnavailable
+          : copy.restoreRolledBack);
+    }
+  }
+
   async function handleDeleteStudyData() {
-    if (!window.confirm(copy.deleteConfirm)) return;
-    setAppMode("path");
-    replaceNavigationState({ mode: "path" });
-    await clearStoredStudyData([STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY, COURSE_NOTES_STORAGE_KEY]);
-    setRecords({});
-    setSelectedId(problems[0].id);
-    setProfile(EMPTY_PROFILE);
-    setFontSize(DEFAULT_FONT_SIZE);
-    setLanguage("zh");
-    setDailyReminder({ enabled: false, time: "20:00" });
-    setRunState({ phase: "idle", message: pageCopy.zh.notRun, results: [] });
-    setReminderMessage(pageCopy.zh.deleteDone);
-    void playTestHaptic(true);
+    if (!hydrated || settingsBusy || !window.confirm(copy.deleteConfirm)) return;
+    setBackupOperation("restoring");
+    setBackupMessageIsError(false);
+    setBackupMessage(copy.deletingData);
+    try {
+      if (!await ensureSingleStudyTab()) {
+        setBackupOperation("idle");
+        return;
+      }
+      dataOperationRef.current = true;
+      saveSequenceRef.current += 1;
+      await storageWritesRef.current;
+      await flushMountedStudyData();
+      await drainCourseStoreWrites();
+      pauseMountedStudyData();
+      const result = await withExclusiveStudyDataOperation(async () => {
+        advanceStudyDataRevision();
+        return clearStoredStudyData(
+          [STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY, COURSE_NOTES_STORAGE_KEY],
+          language,
+        );
+      });
+      replaceNavigationState({ mode: "path" });
+      setBackupMessageIsError(!result.reminderCancelled);
+      setBackupMessage(result.reminderCancelled ? copy.deleteDone : copy.deleteReminderWarning);
+      void playTestHaptic(true);
+      window.setTimeout(() => window.location.reload(), result.reminderCancelled ? 500 : 2_400);
+    } catch (error) {
+      if (!dataStaleRef.current) {
+        dataOperationRef.current = false;
+        resumeMountedStudyData();
+        setSaveState("saved");
+      }
+      setBackupOperation("idle");
+      setBackupMessageIsError(true);
+      setBackupMessage(dataStaleRef.current
+        ? copy.dataChangedOtherTab
+        : error instanceof StudyDataLockUnavailableError
+          ? copy.safeRestoreUnavailable
+          : copy.deleteFailed);
+    }
   }
 
   function updateLineNote(index: number, value: string) {
@@ -1231,27 +1702,25 @@ export default function Home() {
         <div className="header-actions">
           <span className={`save-state ${saveState === "saving" ? headerStyles.saveSaving : saveState === "error" ? headerStyles.saveError : ""}`} role="status"><i />{visibleSaveLabel}</span>
           <nav className="app-mode-nav" aria-label={copy.appNavigation}>
-            <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
-            <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onMouseEnter={() => { void loadCodeEditor(); }} onFocus={() => { void loadCodeEditor(); }} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
-            <button type="button" className={appMode === "course" ? "is-active" : ""} aria-current={appMode === "course" ? "page" : undefined} onMouseEnter={() => { void loadCourseNotes(); }} onFocus={() => { void loadCourseNotes(); }} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
+            <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} disabled={studyEditingBlocked} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
+            <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadCodeEditor(); }} onFocus={() => { void loadCodeEditor(); }} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
+            <button type="button" className={appMode === "course" ? "is-active" : ""} aria-current={appMode === "course" ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadCourseNotes(); }} onFocus={() => { void loadCourseNotes(); }} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
           </nav>
           <div className="language-toggle" role="group" aria-label="Language / 语言">
-            <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} onClick={() => selectLanguage("zh")}>中文</button>
-            <button type="button" lang="en" className={language === "en" ? "is-active" : ""} onClick={() => selectLanguage("en")}>EN</button>
+            <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} disabled={studyEditingBlocked} onClick={() => selectLanguage("zh")}>中文</button>
+            <button type="button" lang="en" className={language === "en" ? "is-active" : ""} disabled={studyEditingBlocked} onClick={() => selectLanguage("en")}>EN</button>
           </div>
           <PwaInstaller language={language} />
-          {nativeApp && (
-            <button className="button native-tools-trigger" type="button" onClick={() => { setReminderMessage(""); setShowNativeSettings(true); }}>
-              <span aria-hidden="true">◷</span>{copy.studyReminder}
-            </button>
-          )}
+          <button className="button native-tools-trigger" type="button" disabled={!hydrated} onClick={() => { setReminderMessage(""); if (!studyEditingBlocked) setBackupMessage(""); setPendingBackup(null); setShowNativeSettings(true); }}>
+            <span aria-hidden="true">⚙</span>{copy.settings}
+          </button>
           <div className="font-size-control" aria-label={copy.adjustFont}>
             <span>{copy.fontSize}</span>
             <button
               type="button"
               aria-label={copy.decreaseFont}
               onClick={() => setFontSize((current) => Math.max(MIN_FONT_SIZE, current - 1))}
-              disabled={fontSize === MIN_FONT_SIZE}
+              disabled={studyEditingBlocked || fontSize === MIN_FONT_SIZE}
             >
               A−
             </button>
@@ -1264,12 +1733,13 @@ export default function Home() {
               onChange={(event) => setFontSize(Number(event.target.value))}
               aria-label={copy.adjustFont}
               aria-valuetext={`${fontScale}%`}
+              disabled={studyEditingBlocked}
             />
             <button
               type="button"
               aria-label={copy.increaseFont}
               onClick={() => setFontSize((current) => Math.min(MAX_FONT_SIZE, current + 1))}
-              disabled={fontSize === MAX_FONT_SIZE}
+              disabled={studyEditingBlocked || fontSize === MAX_FONT_SIZE}
             >
               A+
             </button>
@@ -1279,20 +1749,52 @@ export default function Home() {
         </div>
       </header>
 
-      {saveState === "error" && (
+      {staleStudyData && (
+        <section className={backupStyles.safetyBanner} role="alert" aria-labelledby="stale-study-data-title">
+          <div>
+            <strong id="stale-study-data-title">{copy.staleTitle}</strong>
+            <span>{copy.staleBody}</span>
+            {backupMessage && <small className={backupMessageIsError ? backupStyles.safetyError : backupStyles.safetySuccess}>{backupMessage}</small>}
+          </div>
+          <div className={backupStyles.safetyActions}>
+            <button className="button button-primary" type="button" onClick={() => void handleExportBackup()} disabled={backupBusy}>{copy.rescueBackup}</button>
+            <button className="button button-quiet" type="button" onClick={() => window.location.reload()} disabled={backupBusy}>{copy.retryLoad}</button>
+          </div>
+        </section>
+      )}
+
+      {storageReadOnly && !staleStudyData && (
+        <section className={backupStyles.safetyBanner} role="alert" aria-labelledby="read-only-study-data-title">
+          <div>
+            <strong id="read-only-study-data-title">{copy.readOnlyTitle}</strong>
+            <span>{copy.readOnlyBody}</span>
+            {backupMessage && <small className={backupMessageIsError ? backupStyles.safetyError : backupStyles.safetySuccess}>{backupMessage}</small>}
+          </div>
+          <div className={backupStyles.safetyActions}>
+            <button className="button button-primary" type="button" onClick={() => void handleExportBackup()} disabled={backupBusy}>{copy.exportBackup}</button>
+            <button className="button button-quiet" type="button" onClick={() => setShowNativeSettings(true)} disabled={backupBusy}>{copy.settings}</button>
+          </div>
+        </section>
+      )}
+
+      {saveState === "error" && !staleStudyData && !storageReadOnly && (
         <div className={headerStyles.saveErrorBanner} role="alert">
           <strong>{copy.saveFailed}</strong>
-          <span>{copy.saveRecovery}</span>
+          <span>{storageLoadFailed ? copy.storageLoadFailed : copy.saveRecovery}</span>
         </div>
       )}
 
       {!hydrated && (
-        <div className={headerStyles.restoreNotice} role="status" aria-live="polite">
-          {language === "zh" ? "正在恢复这台设备上的学习记录…" : "Restoring study data on this device…"}
+        <div className={headerStyles.restoreNotice} role={storageLoadFailed ? "alert" : "status"} aria-live="polite">
+          <span>{storageLoadFailed
+            ? copy.storageLoadFailed
+            : language === "zh" ? "正在恢复这台设备上的学习记录…" : "Restoring study data on this device…"}</span>
+          {storageLoadFailed && <button className="button" type="button" onClick={() => window.location.reload()}>{copy.retryLoad}</button>}
         </div>
       )}
 
-      <div inert={!hydrated} aria-busy={!hydrated}>
+      {hydrated && !studyEditingBlocked && (
+      <div>
       {appMode === "path" ? (
         <LearningHub
           problems={displayProblems}
@@ -1776,48 +2278,109 @@ export default function Home() {
         </div>
       )}
       </div>
+      )}
 
-      {nativeApp && showNativeSettings && (
-        <div className="native-settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNativeSettings(false); }}>
-          <section ref={nativeSettingsDialogRef} tabIndex={-1} className="native-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="native-settings-title">
+      {showNativeSettings && (
+        <div className="native-settings-backdrop" role="presentation" onMouseDown={(event) => { if (!settingsBusy && event.target === event.currentTarget) setShowNativeSettings(false); }}>
+          <section ref={nativeSettingsDialogRef} tabIndex={-1} className="native-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="native-settings-title" aria-busy={settingsBusy}>
             <div className="native-settings-handle" aria-hidden="true" />
-            <button className="guide-close" type="button" aria-label={copy.closeSettings} onClick={() => setShowNativeSettings(false)}>×</button>
+            <button className={`guide-close ${backupStyles.closeButton}`} type="button" aria-label={copy.closeSettings} onClick={() => setShowNativeSettings(false)} disabled={settingsBusy}>×</button>
             <div className="section-kicker">ON-DEVICE STUDY</div>
             <h2 id="native-settings-title">{copy.nativeSettingsTitle}</h2>
             <p>{copy.nativeSettingsBody}</p>
 
-            <label className="native-reminder-toggle">
-              <span><strong>{copy.reminderEnabled}</strong><small>{dailyReminder.enabled ? dailyReminder.time : "—"}</small></span>
+            {nativeApp && (
+              <section className={backupStyles.reminderSection} aria-labelledby="study-reminder-title">
+                <h3 id="study-reminder-title">{copy.studyReminder}</h3>
+                <label className="native-reminder-toggle">
+                  <span><strong>{copy.reminderEnabled}</strong><small>{dailyReminder.enabled ? dailyReminder.time : "—"}</small></span>
+                  <input
+                    type="checkbox"
+                    checked={dailyReminder.enabled}
+                    disabled={settingsBusy || studyEditingBlocked}
+                    onChange={(event) => { setReminderMessage(""); setDailyReminder((current) => ({ ...current, enabled: event.target.checked })); }}
+                  />
+                </label>
+
+                <label className="native-reminder-time">
+                  <span>{copy.reminderTime}</span>
+                  <input
+                    type="time"
+                    value={dailyReminder.time}
+                    disabled={settingsBusy || studyEditingBlocked || !dailyReminder.enabled}
+                    onChange={(event) => setDailyReminder((current) => ({ ...current, time: event.target.value }))}
+                  />
+                </label>
+
+                <div className="native-offline-note"><span aria-hidden="true">✓</span><p>{copy.reminderOffline}</p></div>
+                {reminderMessage && <p className="native-settings-message" role="status">{reminderMessage}</p>}
+
+                <button className="button button-primary native-reminder-save" type="button" onClick={handleSaveReminder} disabled={settingsBusy || studyEditingBlocked}>
+                  {reminderSaving ? copy.savingReminder : copy.saveReminder}
+                </button>
+              </section>
+            )}
+
+            <section className={backupStyles.backupSection} aria-labelledby="full-backup-title">
+              <div className={backupStyles.sectionHeading}>
+                <span aria-hidden="true">↥</span>
+                <div>
+                  <h3 id="full-backup-title" ref={pendingBackup ? backupReviewHeadingRef : undefined} tabIndex={pendingBackup ? -1 : undefined}>{pendingBackup ? copy.reviewBackup : copy.fullBackup}</h3>
+                  {!pendingBackup && <p>{copy.backupBody}</p>}
+                </div>
+              </div>
+
+              {pendingBackup ? (
+                <div className={backupStyles.reviewPanel}>
+                  <dl>
+                    <div><dt>{copy.backupCreated}</dt><dd>{new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(pendingBackup.exportedAt))}</dd></div>
+                  </dl>
+                  <p>{copy.backupContains(Object.keys(pendingBackup.study.records).length, pendingBackup.course.courses.length, pendingBackup.profile.xp)}</p>
+                  <p>{copy.currentContains(Object.keys(records).length, currentCourseCount)}</p>
+                  <strong className={backupStyles.warning}>{copy.restoreWarning}</strong>
+                  <div className={backupStyles.reviewActions}>
+                    <button type="button" className="button button-quiet" onClick={handleExportBackup} disabled={settingsBusy}>{copy.exportCurrentFirst}</button>
+                    <button type="button" className="button button-quiet" onClick={() => { setPendingBackup(null); setBackupMessage(""); window.requestAnimationFrame(() => restoreBackupButtonRef.current?.focus()); }} disabled={settingsBusy}>{copy.cancelRestore}</button>
+                    <button type="button" className="button button-primary" onClick={handleRestoreBackup} disabled={settingsBusy || studyEditingBlocked}>{copy.confirmRestore}</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className={backupStyles.backupActions}>
+                    <button type="button" className="button button-primary" onClick={handleExportBackup} disabled={settingsBusy}>
+                      {backupOperation === "exporting" ? copy.backupPreparing : copy.exportBackup}
+                    </button>
+                    <button ref={restoreBackupButtonRef} type="button" className="button button-quiet" onClick={() => backupFileInputRef.current?.click()} disabled={settingsBusy || studyEditingBlocked} aria-describedby="backup-privacy-note">
+                      {backupOperation === "checking" ? copy.backupChecking : copy.restoreBackup}
+                    </button>
+                  </div>
+                  <p id="backup-privacy-note" className={backupStyles.privacyNote}>{copy.backupPrivacy}</p>
+                </>
+              )}
+
               <input
-                type="checkbox"
-                checked={dailyReminder.enabled}
-                onChange={(event) => { setReminderMessage(""); setDailyReminder((current) => ({ ...current, enabled: event.target.checked })); }}
+                ref={backupFileInputRef}
+                className="sr-only"
+                type="file"
+                accept=".json,application/json"
+                tabIndex={-1}
+                aria-label={copy.restoreBackup}
+                onChange={handleBackupFile}
+                disabled={settingsBusy || studyEditingBlocked}
               />
-            </label>
-
-            <label className="native-reminder-time">
-              <span>{copy.reminderTime}</span>
-              <input
-                type="time"
-                value={dailyReminder.time}
-                disabled={!dailyReminder.enabled}
-                onChange={(event) => setDailyReminder((current) => ({ ...current, time: event.target.value }))}
-              />
-            </label>
-
-            <div className="native-offline-note"><span aria-hidden="true">✓</span><p>{copy.reminderOffline}</p></div>
-            {reminderMessage && <p className="native-settings-message" role="status">{reminderMessage}</p>}
-
-            <button className="button button-primary native-reminder-save" type="button" onClick={handleSaveReminder} disabled={reminderSaving}>
-              {reminderSaving ? copy.savingReminder : copy.saveReminder}
-            </button>
+              {backupMessage && (
+                <p className={backupMessageIsError ? backupStyles.errorMessage : backupStyles.statusMessage} role={backupMessageIsError ? "alert" : "status"}>
+                  {backupMessage}
+                </p>
+              )}
+            </section>
 
             <div className="native-settings-links">
-              <button type="button" onClick={() => void openExternalPage(PRIVACY_URL)}>{copy.privacyPolicy}<span aria-hidden="true">↗</span></button>
-              <button type="button" onClick={() => void openExternalPage(SUPPORT_URL)}>{copy.support}<span aria-hidden="true">↗</span></button>
-              <button type="button" onClick={() => void openExternalPage(LICENSES_URL)}>{copy.licenses}<span aria-hidden="true">↗</span></button>
+              <button type="button" disabled={settingsBusy} onClick={() => void openExternalPage(PRIVACY_URL)}>{copy.privacyPolicy}<span aria-hidden="true">↗</span></button>
+              <button type="button" disabled={settingsBusy} onClick={() => void openExternalPage(SUPPORT_URL)}>{copy.support}<span aria-hidden="true">↗</span></button>
+              <button type="button" disabled={settingsBusy} onClick={() => void openExternalPage(LICENSES_URL)}>{copy.licenses}<span aria-hidden="true">↗</span></button>
             </div>
-            <button className="native-delete-data" type="button" onClick={handleDeleteStudyData}>{copy.deleteData}</button>
+            <button className="native-delete-data" type="button" onClick={handleDeleteStudyData} disabled={settingsBusy || studyEditingBlocked}>{copy.deleteData}</button>
           </section>
         </div>
       )}

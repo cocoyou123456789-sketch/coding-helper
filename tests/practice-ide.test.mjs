@@ -30,7 +30,8 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /window\.history\.pushState/);
   assert.match(page, /window\.history\.replaceState/);
   assert.match(page, /addEventListener\("popstate"/);
-  assert.match(page, /inert=\{!hydrated\}/);
+  assert.match(page, /hydrated && !studyEditingBlocked/);
+  assert.doesNotMatch(page, /inert=\{!hydrated\}/);
   assert.match(page, /正在恢复这台设备上的学习记录/);
   assert.match(page, /tabIndex=\{mobileWorkspaceTab === "code" \? 0 : -1\}/);
   assert.match(page, /aria-labelledby="mobile-code-tab"/);

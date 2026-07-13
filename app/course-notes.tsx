@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   appendTranscript,
   buildBulletDraft,
@@ -18,10 +18,14 @@ import {
 import {
   getLargeStoredValue,
   openExternalPage,
-  setLargeStoredValue,
   shareStudyNote,
+  STUDY_DATA_CAPTURE_EVENT,
   STUDY_DATA_CLEAR_EVENT,
+  STUDY_DATA_FLUSH_EVENT,
+  STUDY_DATA_RESUME_EVENT,
 } from "./native-app";
+import { drainCourseStoreWrites, markCourseStoreLoaded, queueCourseStoreFlush, queueCourseStoreWrite } from "./course-storage";
+import { withStudyDataReadLock } from "./study-data-session";
 import {
   getSpeechRecognitionMode,
   startSpeechCapture,
@@ -57,6 +61,8 @@ const copy = {
     saved: "已自动保存在本机",
     saveFailed: "本机存储空间不足，刚才的更改可能没有保存。请先复制重要笔记并清理旧课程。",
     loading: "正在读取本机笔记…",
+    loadFailed: "暂时无法安全读取课程笔记。为防止覆盖原内容，本页没有开始保存。",
+    retryLoad: "重新加载后再试",
     openBilibili: "在 Bilibili 打开 ↗",
     deleteCourse: "删除课程",
     deleteConfirm: "确定删除这节课程及其听写和笔记吗？",
@@ -123,6 +129,8 @@ const copy = {
     saved: "Saved automatically on this device",
     saveFailed: "Local storage is full, so the latest change may not be saved. Copy important notes and remove an old course.",
     loading: "Loading notes from this device…",
+    loadFailed: "Course notes could not be read safely, so saving did not start. Your existing notes have not been overwritten.",
+    retryLoad: "Reload and try again",
     openBilibili: "Open on Bilibili ↗",
     deleteCourse: "Delete course",
     deleteConfirm: "Delete this course, its transcript, and notes?",
@@ -181,6 +189,7 @@ export default function CourseNotes({ language, nativeApp }: Props) {
   const text = copy[language];
   const [store, setStore] = useState<CourseStore>(EMPTY_COURSE_STORE);
   const [hydrated, setHydrated] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [sourceInput, setSourceInput] = useState("");
   const [titleInput, setTitleInput] = useState("");
   const [linkMessage, setLinkMessage] = useState("");
@@ -193,6 +202,10 @@ export default function CourseNotes({ language, nativeApp }: Props) {
   const [loadedPlayerId, setLoadedPlayerId] = useState<string | null>(null);
   const speechControllerRef = useRef<SpeechCaptureController | null>(null);
   const pendingSpeechStartRef = useRef<Promise<SpeechCaptureController> | null>(null);
+  const captureCourseIdRef = useRef<string | null>(null);
+  const interimTextRef = useRef("");
+  const finalCommitSequenceRef = useRef(0);
+  const stopCaptureRef = useRef<Promise<void> | null>(null);
   const captureGenerationRef = useRef(0);
   const sessionStartedAtRef = useRef(0);
   const sessionHasStartedRef = useRef(false);
@@ -210,6 +223,60 @@ export default function CourseNotes({ language, nativeApp }: Props) {
   );
   const captureActive = listening || starting;
 
+  const commitStore = useCallback((update: (current: CourseStore) => CourseStore) => {
+    const next = update(latestStoreRef.current);
+    latestStoreRef.current = next;
+    setStore(next);
+  }, []);
+
+  const appendCapturedTranscript = useCallback((courseId: string, result: string, seconds: number) => {
+    commitStore((current) => ({
+      ...current,
+      courses: current.courses.map((course) => course.id === courseId
+        ? { ...course, transcript: appendTranscript(course.transcript, result, seconds), updatedAt: Date.now() }
+        : course),
+    }));
+  }, [commitStore]);
+
+  const stopActiveCapture = useCallback(async (saveInterim: boolean) => {
+    if (stopCaptureRef.current) return stopCaptureRef.current;
+    const operation = (async () => {
+      const generation = captureGenerationRef.current;
+      const pendingInterim = interimTextRef.current.trim();
+      const courseId = captureCourseIdRef.current;
+      const finalSequenceBeforeStop = finalCommitSequenceRef.current;
+      let controller = speechControllerRef.current;
+      if (!controller && pendingSpeechStartRef.current) {
+        controller = await pendingSpeechStartRef.current.catch(() => null);
+      }
+      await controller?.stop();
+      // Native stop commits its cached final result synchronously. Browser
+      // stop may not, so preserve the last interim only when no final arrived.
+      if (saveInterim
+        && finalCommitSequenceRef.current === finalSequenceBeforeStop
+        && pendingInterim
+        && courseId) {
+        const seconds = sessionStartedAtRef.current
+          ? Math.max(0, Math.floor((performance.now() - sessionStartedAtRef.current) / 1000))
+          : 0;
+        appendCapturedTranscript(courseId, pendingInterim, seconds);
+      }
+      if (captureGenerationRef.current === generation) captureGenerationRef.current += 1;
+      if (speechControllerRef.current === controller) speechControllerRef.current = null;
+      captureCourseIdRef.current = null;
+      interimTextRef.current = "";
+      setStarting(false);
+      setListening(false);
+      setInterimText("");
+    })();
+    stopCaptureRef.current = operation;
+    try {
+      await operation;
+    } finally {
+      if (stopCaptureRef.current === operation) stopCaptureRef.current = null;
+    }
+  }, [appendCapturedTranscript]);
+
   useEffect(() => {
     latestStoreRef.current = store;
   }, [store]);
@@ -220,14 +287,24 @@ export default function CourseNotes({ language, nativeApp }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void getLargeStoredValue(COURSE_NOTES_STORAGE_KEY)
+    void drainCourseStoreWrites()
+      .then(() => withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY)))
       .then((saved) => {
-        if (cancelled || !saved) return;
-        setStore(normalizeCourseStore(JSON.parse(saved)));
+        if (cancelled) return;
+        if (saved) {
+          const normalized = normalizeCourseStore(JSON.parse(saved));
+          latestStoreRef.current = normalized;
+          setStore(normalized);
+          markCourseStoreLoaded(normalized);
+        } else {
+          markCourseStoreLoaded(EMPTY_COURSE_STORE);
+        }
+        setHydrated(true);
       })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setHydrated(true);
+      .catch(() => {
+        if (cancelled) return;
+        skipPersistenceRef.current = true;
+        setLoadFailed(true);
       });
     return () => {
       cancelled = true;
@@ -238,7 +315,7 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     if (!hydrated) return;
     const timer = window.setTimeout(() => {
       if (skipPersistenceRef.current) return;
-      void setLargeStoredValue(COURSE_NOTES_STORAGE_KEY, JSON.stringify(store))
+      void queueCourseStoreWrite(store)
         .catch(() => setActionMessage(text.saveFailed));
     }, 600);
     return () => window.clearTimeout(timer);
@@ -247,8 +324,10 @@ export default function CourseNotes({ language, nativeApp }: Props) {
   useEffect(() => {
     const flushLatestStore = () => {
       if (!hydratedRef.current || skipPersistenceRef.current) return;
-      void setLargeStoredValue(COURSE_NOTES_STORAGE_KEY, JSON.stringify(latestStoreRef.current))
-        .catch(() => undefined);
+      return queueCourseStoreFlush(
+        () => stopActiveCapture(true),
+        () => latestStoreRef.current,
+      );
     };
     const flushWhenHidden = () => {
       if (document.visibilityState === "hidden") flushLatestStore();
@@ -258,20 +337,45 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     return () => {
       window.removeEventListener("pagehide", flushLatestStore);
       document.removeEventListener("visibilitychange", flushWhenHidden);
-      flushLatestStore();
+      void flushLatestStore()?.catch(() => undefined);
     };
-  }, []);
+  }, [stopActiveCapture]);
 
   useEffect(() => {
     const prepareForClear = () => {
       skipPersistenceRef.current = true;
-      captureGenerationRef.current += 1;
-      void speechControllerRef.current?.stop();
-      speechControllerRef.current = null;
+      void stopActiveCapture(false);
+    };
+    const resumePersistence = () => {
+      skipPersistenceRef.current = false;
+    };
+    const flushForBackup = (event: Event) => {
+      if (!hydratedRef.current || skipPersistenceRef.current) return;
+      const detail = (event as CustomEvent<{ waitUntil(promise: Promise<void>): void }>).detail;
+      detail?.waitUntil(queueCourseStoreFlush(
+        () => stopActiveCapture(true),
+        () => latestStoreRef.current,
+      ));
+    };
+    const captureForBackup = (event: Event) => {
+      if (!hydratedRef.current || skipPersistenceRef.current) return;
+      const detail = (event as CustomEvent<{ provide(key: string, value: Promise<string>): void }>).detail;
+      detail?.provide(COURSE_NOTES_STORAGE_KEY, (async () => {
+        await stopActiveCapture(true);
+        return JSON.stringify(latestStoreRef.current);
+      })());
     };
     window.addEventListener(STUDY_DATA_CLEAR_EVENT, prepareForClear);
-    return () => window.removeEventListener(STUDY_DATA_CLEAR_EVENT, prepareForClear);
-  }, []);
+    window.addEventListener(STUDY_DATA_CAPTURE_EVENT, captureForBackup);
+    window.addEventListener(STUDY_DATA_FLUSH_EVENT, flushForBackup);
+    window.addEventListener(STUDY_DATA_RESUME_EVENT, resumePersistence);
+    return () => {
+      window.removeEventListener(STUDY_DATA_CLEAR_EVENT, prepareForClear);
+      window.removeEventListener(STUDY_DATA_CAPTURE_EVENT, captureForBackup);
+      window.removeEventListener(STUDY_DATA_FLUSH_EVENT, flushForBackup);
+      window.removeEventListener(STUDY_DATA_RESUME_EVENT, resumePersistence);
+    };
+  }, [stopActiveCapture]);
 
   useEffect(() => {
     if (!listening) return;
@@ -281,16 +385,8 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     return () => window.clearInterval(timer);
   }, [listening]);
 
-  useEffect(() => {
-    return () => {
-      captureGenerationRef.current += 1;
-      void speechControllerRef.current?.stop();
-      speechControllerRef.current = null;
-    };
-  }, []);
-
   function updateCourse(courseId: string, patch: Partial<CourseDocument>) {
-    setStore((current) => ({
+    commitStore((current) => ({
       ...current,
       courses: current.courses.map((course) => course.id === courseId
         ? { ...course, ...patch, updatedAt: Date.now() }
@@ -299,19 +395,13 @@ export default function CourseNotes({ language, nativeApp }: Props) {
   }
 
   async function stopListening() {
-    captureGenerationRef.current += 1;
-    const controller = speechControllerRef.current;
-    speechControllerRef.current = null;
-    await controller?.stop();
-    setStarting(false);
-    setListening(false);
-    setInterimText("");
+    await stopActiveCapture(true);
   }
 
   function selectCourse(courseId: string) {
     void stopListening();
     setLoadedPlayerId(null);
-    setStore((current) => ({ ...current, activeId: courseId }));
+    commitStore((current) => ({ ...current, activeId: courseId }));
     setActionMessage("");
   }
 
@@ -332,7 +422,7 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     }
     const recognitionLanguage: CourseRecognitionLanguage = language === "zh" ? "zh-CN" : "en-US";
     const course = existing ?? createCourseDocument(result.source, titleInput, recognitionLanguage);
-    setStore((current) => ({
+    commitStore((current) => ({
       activeId: course.id,
       courses: existing
         ? current.courses.map((item) => item.id === existing.id
@@ -370,9 +460,13 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     setActionMessage("");
     setElapsed(0);
     const courseId = activeCourse.id;
+    captureCourseIdRef.current = courseId;
     const startPromise = startSpeechCapture(activeCourse.recognitionLanguage, {
       onInterim: (value) => {
-        if (captureGenerationRef.current === generation) setInterimText(value);
+        if (captureGenerationRef.current === generation) {
+          interimTextRef.current = value;
+          setInterimText(value);
+        }
       },
       onListening: (nextListening) => {
         if (captureGenerationRef.current !== generation) return;
@@ -392,16 +486,13 @@ export default function CourseNotes({ language, nativeApp }: Props) {
       },
       onFinal: (result) => {
         if (captureGenerationRef.current !== generation) return;
+        finalCommitSequenceRef.current += 1;
+        interimTextRef.current = "";
         setInterimText("");
         const seconds = sessionStartedAtRef.current
           ? Math.max(0, Math.floor((performance.now() - sessionStartedAtRef.current) / 1000))
           : 0;
-        setStore((current) => ({
-          ...current,
-          courses: current.courses.map((course) => course.id === courseId
-            ? { ...course, transcript: appendTranscript(course.transcript, result, seconds), updatedAt: Date.now() }
-            : course),
-        }));
+        appendCapturedTranscript(courseId, result, seconds);
       },
     });
     pendingSpeechStartRef.current = startPromise;
@@ -434,7 +525,7 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     if (!activeCourse || !window.confirm(text.deleteConfirm)) return;
     void stopListening();
     setLoadedPlayerId(null);
-    setStore((current) => {
+    commitStore((current) => {
       const courses = current.courses.filter((course) => course.id !== activeCourse.id);
       return { activeId: courses[0]?.id ?? null, courses };
     });
@@ -470,10 +561,25 @@ export default function CourseNotes({ language, nativeApp }: Props) {
     }
   }
 
-  function clearTranscript() {
+  async function clearTranscript() {
     if (!activeCourse || !window.confirm(text.clearConfirm)) return;
-    void stopListening();
-    updateCourse(activeCourse.id, { transcript: "" });
+    const courseId = activeCourse.id;
+    await stopListening();
+    updateCourse(courseId, { transcript: "" });
+  }
+
+  if (!hydrated) {
+    return (
+      <section className={styles.shell} aria-busy={!loadFailed}>
+        <div className={styles.hero} role={loadFailed ? "alert" : "status"}>
+          <div>
+            <span className={styles.kicker}>{text.kicker}</span>
+            <h1>{loadFailed ? text.loadFailed : text.loading}</h1>
+            {loadFailed && <button type="button" onClick={() => window.location.reload()}>{text.retryLoad}</button>}
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

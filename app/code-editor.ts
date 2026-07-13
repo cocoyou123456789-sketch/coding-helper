@@ -137,7 +137,7 @@ export function editForEnter(code: string, selectionStart: number, selectionEnd:
   const after = code.slice(selectionEnd);
   const currentLine = before.slice(startOfLine(code, selectionStart));
   const baseIndent = indentationOf(currentLine);
-  const previousCharacter = before.at(-1) ?? "";
+  const previousCharacter = before.charAt(before.length - 1);
   const nextCharacter = after[0] ?? "";
 
   if (BRACKET_PAIRS[previousCharacter] === nextCharacter) {

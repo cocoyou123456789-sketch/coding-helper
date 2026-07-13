@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 const file = (path) => new URL(path, root);
 
 test("the iOS bundle is local, branded independently, and App Store ready", async () => {
-  const [html, nativeHtml, configSource, nativeConfig, worker, privacyManifest, packageSwift, infoPlist, manifestSource] = await Promise.all([
+  const [html, nativeHtml, configSource, nativeConfig, worker, privacyManifest, packageSwift, infoPlist, manifestSource, nativeStorageSource, courseModelSource, editorSource] = await Promise.all([
     readFile(file("dist/client/index.html"), "utf8"),
     readFile(file("ios/App/App/public/index.html"), "utf8"),
     readFile(file("capacitor.config.ts"), "utf8"),
@@ -16,6 +16,9 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
     readFile(file("ios/App/CapApp-SPM/Package.swift"), "utf8"),
     readFile(file("ios/App/App/Info.plist"), "utf8"),
     readFile(file("dist/client/.vite/manifest.json"), "utf8"),
+    readFile(file("app/native-app.ts"), "utf8"),
+    readFile(file("app/course-notes-model.ts"), "utf8"),
+    readFile(file("app/code-editor.ts"), "utf8"),
   ]);
   const manifest = JSON.parse(manifestSource);
 
@@ -58,6 +61,7 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
   assert.match(infoPlist, /NSMicrophoneUsageDescription/);
   assert.match(infoPlist, /NSSpeechRecognitionUsageDescription/);
   assert.match(infoPlist, /不会保存录音/);
+  assert.doesNotMatch(`${nativeStorageSource}\n${courseModelSource}\n${editorSource}`, /Object\.hasOwn\(|\.at\(/);
 
   await assert.rejects(stat(file("ios/App/App/public/sw.js")), { code: "ENOENT" });
   await assert.rejects(stat(file("ios/App/App/public/manifest.webmanifest")), { code: "ENOENT" });

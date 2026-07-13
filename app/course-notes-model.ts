@@ -158,7 +158,8 @@ export function formatElapsed(seconds: number): string {
 export function appendTranscript(existing: string, text: string, elapsedSeconds: number): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return existing;
-  const previousLine = existing.trimEnd().split("\n").at(-1)?.replace(/^\[\d+:\d{2}\]\s*/, "") ?? "";
+  const existingLines = existing.trimEnd().split("\n");
+  const previousLine = existingLines[existingLines.length - 1]?.replace(/^\[\d+:\d{2}\]\s*/, "") ?? "";
   if (previousLine === normalized) return existing;
   const line = `[${formatElapsed(elapsedSeconds)}] ${normalized}`;
   return `${existing.trimEnd()}${existing.trim() ? "\n" : ""}${line}`.slice(0, MAX_COURSE_TEXT_LENGTH);

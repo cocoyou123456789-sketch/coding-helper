@@ -14,7 +14,7 @@ async function render() {
   );
 }
 
-test("renders the Hot 100 learning workspace", async () => {
+test("renders a non-editable hydration shell before local study data is restored", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -23,15 +23,9 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.match(html, /<html lang="zh-CN">/i);
   assert.match(html, /题解簿/);
   assert.match(html, /LeetCode Hot 100/);
-  assert.match(html, /两数之和/);
-  assert.match(html, /今天写一页/);
-  assert.match(html, /第一次使用？照着 4 步走/);
-  assert.match(html, /闯关小课/);
-  assert.match(html, /极速抢答/);
-  assert.match(html, /算法闪卡/);
-  assert.match(html, /直接练完整题/);
-  assert.match(html, /完整题目练习/);
-  assert.match(html, /按难度学习/);
+  assert.match(html, /正在恢复这台设备上的学习记录/);
+  assert.doesNotMatch(html, /两数之和/);
+  assert.doesNotMatch(html, /<textarea\b/i);
   assert.match(html, /Language \/ 语言/);
   assert.match(html, /调整字体大小/);
   assert.match(html, /type="range"/);
