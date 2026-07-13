@@ -133,6 +133,12 @@ function compactValue(value: unknown): string {
 
 /** Explain one concrete difference instead of asking a beginner to inspect the whole result. */
 export function describeFirstMismatch(expected: unknown, actual: unknown, language: Language): string {
+  if (expected !== null && expected !== undefined && (actual === null || actual === undefined)) {
+    return language === "zh"
+      ? "实际结果是 null（Python 里的 None），通常表示函数没有返回答案。先检查是否漏写 return，或某个分支没有走到 return。"
+      : "The actual result is null (Python None), which usually means the function returned no answer. Check for a missing return or a branch that never reaches return.";
+  }
+
   const mismatch = firstMismatch(expected, actual);
   if (!mismatch) {
     return language === "zh"
@@ -176,16 +182,46 @@ export function messageBelongsToRun(message: WorkerMessageLike, requestId: strin
 /** Extract only source-code line numbers, never the internal test wrapper's line. */
 export function solutionErrorLine(value: unknown): number | null {
   if (typeof value !== "string") return null;
-  const match = value.match(/(?:File\s+)?["']?<solution>["']?,?\s+line\s+(\d+)/i)
-    ?? value.match(/\(<solution>,\s*line\s+(\d+)\)/i);
-  if (!match) return null;
-  const line = Number(match[1]);
-  return Number.isInteger(line) && line > 0 ? line : null;
+  const matches = value.matchAll(/(?:(?:File\s+)?["']?<solution>["']?,?\s+line\s+(\d+)|\(<solution>,\s*line\s+(\d+)\))/gi);
+  let deepestLine: number | null = null;
+  for (const match of matches) {
+    const line = Number(match[1] ?? match[2]);
+    if (Number.isInteger(line) && line > 0) deepestLine = line;
+  }
+  return deepestLine;
+}
+
+/** Hide Pyodide internals and keep only the final Python exception for the learner-facing UI. */
+export function pythonErrorSummary(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const message = value.trim();
+  if (!message) return "";
+
+  const matches = Array.from(message.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)):\s*([^\r\n]*)/g));
+  const usefulMatches = matches.filter((match) => match[1] !== "PythonError");
+  const match = usefulMatches.at(-1) ?? matches.at(-1);
+  if (match) {
+    const detail = match[2].trim();
+    return detail ? `${match[1]}: ${detail}` : match[1];
+  }
+
+  const firstLine = message.split(/\r?\n/, 1)[0].trim();
+  return firstLine.length > 240 ? `${firstLine.slice(0, 237)}…` : firstLine;
 }
 
 export function beginnerPythonErrorHint(value: unknown, language: Language): string {
   const message = typeof value === "string" ? value : "";
-  const errorName = message.match(/\b(?:IndentationError|TabError|SyntaxError|NameError|TypeError|AttributeError|IndexError|KeyError)\b/)?.[0] ?? "";
+  if (/NoneType[^\r\n]*not iterable|non-iterable NoneType/i.test(message)) {
+    return language === "zh"
+      ? "这里收到的是 None，通常表示前面的函数没有返回答案。先检查是否漏写 return，或某个分支没有走到 return。"
+      : "This received None, which usually means an earlier function returned no answer. Check for a missing return or a branch that never reaches return.";
+  }
+  if (/\bNoneType\b/.test(message)) {
+    return language === "zh"
+      ? "这里的值是 None。如果它来自函数，检查 return；否则检查变量或指针为什么提前变成了 None。"
+      : "This value is None. If it came from a function, check return; otherwise trace why the variable or pointer became None too early.";
+  }
+  const errorName = message.match(/\b(?:UnboundLocalError|ZeroDivisionError|IndentationError|RecursionError|AttributeError|SyntaxError|NameError|TypeError|ValueError|IndexError|KeyError|TabError)\b/)?.[0] ?? "";
 
   if (language === "en") {
     const hints: Record<string, string> = {
@@ -193,10 +229,14 @@ export function beginnerPythonErrorHint(value: unknown, language: Language): str
       TabError: "Indentation mixes tabs and spaces. Select the affected lines and indent them again with the editor.",
       SyntaxError: "Syntax error: check the highlighted line and the line before it for a missing colon, bracket, quote, or comma.",
       NameError: "Unknown name: check the spelling and make sure the variable is assigned before this line runs.",
+      UnboundLocalError: "This local variable is read before it receives a value. Make sure every earlier branch assigns it first.",
       TypeError: "Type mismatch: check what value each function or operator receives on this line.",
+      ValueError: "The value has the right general type but cannot be converted or used in this form. Check the input value on this line.",
       AttributeError: "This value does not have the method or field being used. Check its type and spelling.",
       IndexError: "The index is outside the list. Check the loop boundary and the list length.",
       KeyError: "The dictionary does not contain this key yet. Check membership before reading it.",
+      ZeroDivisionError: "The divisor became zero. Check the value after / or // before doing the calculation.",
+      RecursionError: "The function called itself too many times. Check the base case and whether each call gets closer to it.",
     };
     return hints[errorName] ?? "Start with the first error and its line number. Fix that one, then run again; later errors often disappear with it.";
   }
@@ -206,10 +246,14 @@ export function beginnerPythonErrorHint(value: unknown, language: Language): str
     TabError: "缩进混用了 Tab 和空格。选中附近几行，用编辑器重新缩进一次。",
     SyntaxError: "语法错误：先检查高亮行及它的上一行，是否漏了冒号、括号、引号或逗号。",
     NameError: "变量名还不存在：检查拼写，并确认它在执行到这一行之前已经赋值。",
+    UnboundLocalError: "局部变量还没赋值就被读取了；检查前面的每个分支是否都会给它赋值。",
     TypeError: "数据类型不匹配：看看这一行的函数或运算符实际收到了什么值。",
+    ValueError: "值的类型大致正确，但当前内容无法这样转换或使用；先检查这一行收到的具体值。",
     AttributeError: "这个值没有你调用的方法或属性，请检查它的类型和拼写。",
     IndexError: "下标超出了列表范围，请检查循环边界和列表长度。",
     KeyError: "字典里还没有这个键；读取前先判断它是否存在。",
+    ZeroDivisionError: "除数变成了 0；先检查 / 或 // 后面的值，再进行计算。",
+    RecursionError: "函数调用自己的次数太多；检查终止条件，以及每次调用是否更接近终止条件。",
   };
   return hints[errorName] ?? "先看第一条错误和它提示的行号，只修这一处再运行；后面的错误常会一起消失。";
 }

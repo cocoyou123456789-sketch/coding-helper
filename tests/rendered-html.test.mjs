@@ -82,6 +82,9 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(pageSource, /先把代码外壳找回来/);
   assert.match(pageSource, /恢复初始代码后，从 pass 那一行开始写/);
   assert.match(pageSource, /当前代码（包括注释）和逐行解释会被替换/);
+  assert.match(pageSource, /你的代码还没有执行，也没有丢失/);
+  assert.match(pageSource, /代码运行太久，先检查循环/);
+  assert.match(pageSource, /workerFailed: "Python 环境暂时无法启动，请重新运行。"/);
   assert.match(pageSource, /保存失败，请先复制重要笔记/);
   assert.match(pageSource, /saveErrorBanner/);
   assert.match(pageSource, /mobile-workspace-tabs/);

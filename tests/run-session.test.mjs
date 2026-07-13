@@ -6,6 +6,7 @@ import {
   beginnerPythonErrorHint,
   describeFirstMismatch,
   messageBelongsToRun,
+  pythonErrorSummary,
   pythonSourceIsEmpty,
   solutionErrorLine,
   starterPlaceholderLine,
@@ -69,6 +70,9 @@ test("logical failures describe one concrete mismatch in either language", () =>
   assert.match(describeFirstMismatch("cat", "car", "en"), /result\[2\].*"t".*"r"/);
   assert.match(describeFirstMismatch([1, 2, 3], [1, 2], "zh"), /长度不同.*预期 3.*实际 2/);
   assert.match(describeFirstMismatch({ answer: 1 }, {}, "zh"), /结果\.answer.*缺少/);
+  assert.match(describeFirstMismatch([0, 1], null, "zh"), /Python 里的 None.*return/);
+  assert.match(describeFirstMismatch(42, undefined, "en"), /Python None.*missing return/);
+  assert.doesNotMatch(describeFirstMismatch(null, 1, "zh"), /漏写 return/);
 });
 
 test("run messages cannot leak into a newer problem request", () => {
@@ -83,12 +87,31 @@ test("run messages cannot leak into a newer problem request", () => {
 test("source line extraction ignores the internal test expression", () => {
   assert.equal(solutionErrorLine('File "<solution>", line 7\nSyntaxError'), 7);
   assert.equal(solutionErrorLine("SyntaxError (<solution>, line 3)"), 3);
+  assert.equal(solutionErrorLine('File "<solution>", line 6, in solve\nFile "<solution>", line 2, in helper\nNameError'), 2);
   assert.equal(solutionErrorLine('File "<test-expression>", line 1'), null);
   assert.equal(solutionErrorLine("no line here"), null);
+});
+
+test("learner-facing errors hide Pyodide traceback internals", () => {
+  const traceback = `PythonError: Traceback (most recent call last):
+  File "/lib/python3.13/site-packages/_pyodide/_base.py", line 1, in eval_code
+  File "<solution>", line 4, in twoSum
+NameError: name 'seen' is not defined`;
+  const summary = pythonErrorSummary(traceback);
+  assert.equal(summary, "NameError: name 'seen' is not defined");
+  assert.doesNotMatch(summary, /_pyodide|Traceback|<solution>/);
+  assert.equal(pythonErrorSummary("plain runner failure"), "plain runner failure");
 });
 
 test("beginner hints translate common Python errors", () => {
   assert.match(beginnerPythonErrorHint("IndentationError: unexpected indent", "zh"), /缩进/);
   assert.match(beginnerPythonErrorHint("NameError: name nums is not defined", "en"), /Unknown name/);
+  assert.match(beginnerPythonErrorHint("TypeError: 'NoneType' object is not iterable", "zh"), /没有返回答案.*return/);
+  assert.match(beginnerPythonErrorHint("TypeError: cannot unpack non-iterable NoneType object", "en"), /returned no answer.*return/);
+  const nonePointerHint = beginnerPythonErrorHint("AttributeError: 'NoneType' object has no attribute 'next'", "zh");
+  assert.match(nonePointerHint, /变量或指针.*None/);
+  assert.doesNotMatch(nonePointerHint, /没有返回答案/);
+  assert.match(beginnerPythonErrorHint("ValueError: invalid literal", "zh"), /转换或使用/);
+  assert.match(beginnerPythonErrorHint("RecursionError: maximum recursion depth exceeded", "en"), /base case/);
   assert.match(beginnerPythonErrorHint("Something else", "zh"), /第一条错误/);
 });

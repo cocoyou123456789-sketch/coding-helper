@@ -40,11 +40,13 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /setSourceIssue\("empty"\)/);
   assert.match(page, /restoreStarterCode\(emptyRecoveryNeedsConfirmation, true\)/);
   assert.match(page, /describeFirstMismatch/);
+  assert.match(page, /pythonErrorSummary/);
   assert.match(page, /saveFailedTestToReview/);
   assert.match(page, /onClick=\{\(\) => runTests\(\)\}/);
   assert.match(page, /onRun=\{\(\) => runTests\(\)\}/);
   assert.match(page, /runTests\(\{ allowPlaceholder: true \}\)/);
   assert.match(page, /testConsoleRef\.current\?\.scrollIntoView/);
+  assert.match(page, /runStatusRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(page, /problemHeadingRef\.current\?\.focus/);
   assert.match(page, /revealLine\(nextLine, \{ focus: false \}\)/);
   assert.match(page, /revealLine\(safeActiveCodeLine, \{ focus: false \}\)/);
@@ -87,6 +89,18 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.doesNotMatch(page, /autosave-badge">\{copy\.saved\}/);
   assert.doesNotMatch(page, /onClick=\{\(\) => updateRecord\(\{ status \}\)\}/);
   assert.doesNotMatch(page, /className="code-field"/);
+  assert.match(page, /kind: "code" \| "timeout" \| "runtime"/);
+  assert.match(page, /runState\.kind === "code"/);
+  assert.match(page, /runState\.kind === "runtime"/);
+  assert.match(page, /runState\.kind === "timeout"/);
+  assert.match(page, /kind === "runtime" \? copy\.runtimeTimeout : copy\.timeout/);
+  assert.match(page, /copy\.runtimeFailureTitle/);
+  assert.match(page, /function retryTests\(\)[\s\S]*?runStatusRef\.current\?\.focus/);
+  assert.match(page, /onClick=\{retryTests\}>\{copy\.retryRun\}/);
+  assert.match(page, /runtimeCoach}[\s\S]*?focusCodeLine\(safeActiveCodeLine\)[\s\S]*?copy\.backToEditor/);
+  assert.match(page, /focusCodeLine\(runErrorLine \?\? safeActiveCodeLine\)/);
+  assert.match(page, /wrongAnswerCoach}[\s\S]*?focusCodeLine\(safeActiveCodeLine\)[\s\S]*?copy\.backToEditor/);
+  assert.match(page, /ref=\{runStatusRef\}[\s\S]*?tabIndex=\{-1\}/);
 
   assert.match(editor, /EditorView/);
   assert.match(editor, /python\(\)/);
@@ -97,6 +111,7 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(editor, /onCursorLineChangeRef/);
   assert.match(editor, /update\.selectionSet/);
   assert.match(editor, /options\?\.focus !== false/);
+  assert.match(editor, /"&\.cm-focused"[\s\S]*?boxShadow: "inset 0 0 0 2px #f2a1b9"/);
 
   assert.match(styles, /grid-template-columns: minmax\(330px, 42%\)/);
   assert.match(styles, /\.notesDrawer/);
@@ -104,6 +119,9 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.errorCoach/);
   assert.match(styles, /\.emptySourceCoach/);
   assert.match(styles, /\.wrongAnswerCoach/);
+  assert.match(styles, /\.runtimeCoach/);
+  assert.match(styles, /\.timeoutCoach/);
+  assert.match(styles, /\.consoleStatusFocus:focus/);
   assert.match(styles, /\.methodDisclosure/);
   assert.match(styles, /scroll-margin-top: calc\(64px \+ env\(safe-area-inset-top\)\)/);
   assert.match(styles, /\.lineNoteNavigator/);

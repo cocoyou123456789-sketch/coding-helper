@@ -55,7 +55,7 @@ import {
 } from "./practice-library";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
-import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, pythonSourceIsEmpty, solutionErrorLine, starterPlaceholderLine, starterRecoveryNeedsConfirmation } from "./run-session";
+import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, pythonErrorSummary, pythonSourceIsEmpty, solutionErrorLine, starterPlaceholderLine, starterRecoveryNeedsConfirmation } from "./run-session";
 import {
   createStudyBackup,
   MAX_STUDY_BACKUP_BYTES,
@@ -117,7 +117,7 @@ type RunState =
   | { phase: "idle"; message: string; results: WorkerTestResult[] }
   | { phase: "running"; message: string; results: WorkerTestResult[] }
   | { phase: "done"; message: string; results: WorkerTestResult[]; duration: number; stdout: string; errorLine?: number }
-  | { phase: "error"; message: string; results: WorkerTestResult[]; stdout?: string; errorLine?: number };
+  | { phase: "error"; kind: "code" | "timeout" | "runtime"; message: string; results: WorkerTestResult[]; stdout?: string; errorLine?: number };
 
 type BackupOperation = "idle" | "exporting" | "checking" | "restoring";
 
@@ -334,10 +334,16 @@ const pageCopy = {
     loadingPython: "正在加载 Python 环境…首次运行会稍慢",
     runningCode: "正在运行…",
     timeout: "运行超过 20 秒，已自动停止。请检查是否写了不会结束的循环。",
+    timeoutTitle: "代码运行太久，先检查循环",
+    timeoutBody: "Python 已经正常启动。回到代码，只检查 while / for 是否会结束、指针是否每轮更新，或递归是否有终止条件。",
+    runtimeTimeout: "Python 环境加载时间过长，代码尚未执行。请重新运行；网页首次使用若仍失败，再检查网络。",
+    runtimeFailureTitle: "Python 环境还没启动",
+    runtimeFailureBody: "你的代码还没有执行，也没有丢失。请重新运行；网页首次使用若仍失败，再检查网络。",
+    retryRun: "重新运行",
     allPassed: "快速测试全部通过！",
     someFailed: "还有测试没有通过，看看实际结果和预期结果哪里不同。",
     runFailed: "代码运行失败，请检查语法和缩进。",
-    workerFailed: "无法启动 Python 环境，请检查网络后重试。",
+    workerFailed: "Python 环境暂时无法启动，请重新运行。",
     guideTitle: "第一次学习，照着这 4 步来",
     guideSteps: [
       ["选择难度", "第一次建议从简单开始，之后再逐渐提高。"],
@@ -569,10 +575,16 @@ const pageCopy = {
     loadingPython: "Loading Python… the first run may take a moment",
     runningCode: "Running…",
     timeout: "Stopped after 20 seconds. Check for a loop that never ends.",
+    timeoutTitle: "The code ran too long — check the loop",
+    timeoutBody: "Python started correctly. Return to the code and check whether each while / for loop can end, each pointer moves, and recursion has a base case.",
+    runtimeTimeout: "Python took too long to load, so your code did not run. Try again; on the web, check the connection if the first run still fails.",
+    runtimeFailureTitle: "Python did not start yet",
+    runtimeFailureBody: "Your code did not run and has not been lost. Try again; on the web, check the connection if the first run still fails.",
+    retryRun: "Run again",
     allPassed: "All quick tests passed!",
     someFailed: "Some tests still fail. Compare the actual and expected results.",
     runFailed: "The code failed to run. Check the syntax and indentation.",
-    workerFailed: "Python could not start. Check your connection and try again.",
+    workerFailed: "Python could not start yet. Try running it again.",
     guideTitle: "Your first learning session in 4 steps",
     guideSteps: [
       ["Choose a level", "Easy is the best place to begin, then move up gradually."],
@@ -833,6 +845,7 @@ export default function Home() {
   const recognitionSignalRef = useRef<HTMLTextAreaElement | null>(null);
   const completionStatusRef = useRef<HTMLDivElement | null>(null);
   const testConsoleRef = useRef<HTMLElement | null>(null);
+  const runStatusRef = useRef<HTMLDivElement | null>(null);
   const problemMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const notesButtonRef = useRef<HTMLButtonElement | null>(null);
   const libraryDrawerRef = useRef<HTMLElement | null>(null);
@@ -902,9 +915,11 @@ export default function Home() {
       : saveState === "saving" ? copy.saving : saveState === "error" ? copy.saveFailed : copy.saved;
   const noteSaveIsError = staleStudyData || storageReadOnly || saveState === "error";
   const firstFailedResult = runState.results.find((result) => !result.passed);
-  const runErrorForCoaching = runState.phase === "error"
+  const runErrorForCoaching = runState.phase === "error" && runState.kind === "code"
     ? runState.message
     : firstFailedResult?.error?.message;
+  const runtimeFailure = runState.phase === "error" && runState.kind === "runtime";
+  const executionTimeout = runState.phase === "error" && runState.kind === "timeout";
   const runErrorLine = runState.phase === "done" || runState.phase === "error"
     ? runState.errorLine
     : undefined;
@@ -1872,6 +1887,7 @@ export default function Home() {
       runFeedbackFrameRef.current = null;
       if (generation !== runFeedbackGenerationRef.current) return;
       testConsoleRef.current?.scrollIntoView({ block: "start", behavior });
+      runStatusRef.current?.focus({ preventScroll: true });
     });
   }
 
@@ -2014,6 +2030,11 @@ export default function Home() {
     else codeEditorRef.current?.indent();
   }
 
+  function retryTests() {
+    runTests();
+    window.requestAnimationFrame(() => runStatusRef.current?.focus({ preventScroll: true }));
+  }
+
   function runTests(options?: { allowPlaceholder?: boolean }) {
     if (runState.phase === "running" || activeRunRef.current) return;
 
@@ -2061,7 +2082,7 @@ export default function Home() {
       return true;
     }
 
-    const armTimeout = (duration: number) => {
+    const armTimeout = (duration: number, kind: "timeout" | "runtime") => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
         if (!finishActiveRequest()) return;
@@ -2070,13 +2091,14 @@ export default function Home() {
         runtimeReadyRef.current = false;
         setRunState({
           phase: "error",
-          message: copy.timeout,
+          kind,
+          message: kind === "runtime" ? copy.runtimeTimeout : copy.timeout,
           results: [],
         });
         scrollRunFeedbackIntoView();
       }, duration);
     };
-    armTimeout(runtimeReadyRef.current ? 20_000 : 90_000);
+    armTimeout(runtimeReadyRef.current ? 20_000 : 90_000, runtimeReadyRef.current ? "timeout" : "runtime");
 
     function handleWorkerMessage(event: MessageEvent) {
       const data = event.data;
@@ -2084,7 +2106,7 @@ export default function Home() {
       if (data.type === "status") {
         if (data.status === "ready") {
           runtimeReadyRef.current = true;
-          armTimeout(20_000);
+          armTimeout(20_000, "timeout");
         }
         setRunState((previous) => ({
           phase: "running",
@@ -2097,7 +2119,15 @@ export default function Home() {
       if (!finishActiveRequest()) return;
 
       if (data.type === "result") {
-        const results = (data.results ?? []) as WorkerTestResult[];
+        const results = ((data.results ?? []) as WorkerTestResult[]).map((result) => result.error
+          ? {
+              ...result,
+              error: {
+                ...result.error,
+                message: pythonErrorSummary(result.error.message) || result.error.message,
+              },
+            }
+          : result);
         const allPassed = results.length > 0 && results.every((result) => result.passed);
         const firstError = results.find((result) => !result.passed)?.error;
         const errorLine = solutionErrorLine(`${firstError?.message ?? ""}\n${firstError?.traceback ?? ""}`);
@@ -2114,10 +2144,21 @@ export default function Home() {
         return;
       }
 
-      const errorMessage = data.error?.message ?? copy.runFailed;
-      const errorLine = solutionErrorLine(`${errorMessage}\n${data.error?.traceback ?? ""}`);
+      const kind = data.phase === "loading" ? "runtime" : "code";
+      if (kind === "runtime") {
+        worker.terminate();
+        workerRef.current = null;
+        runtimeReadyRef.current = false;
+      }
+      const errorMessage = kind === "runtime"
+        ? copy.workerFailed
+        : pythonErrorSummary(data.error?.message) || copy.runFailed;
+      const errorLine = kind === "code"
+        ? solutionErrorLine(`${data.error?.message ?? ""}\n${data.error?.traceback ?? ""}`)
+        : null;
       setRunState({
         phase: "error",
+        kind,
         message: errorMessage,
         results: [],
         stdout: data.stdout ?? "",
@@ -2126,14 +2167,15 @@ export default function Home() {
       revealRunOutcome(errorLine ?? undefined);
     }
 
-    function handleWorkerError(event: ErrorEvent) {
+    function handleWorkerError() {
       if (!finishActiveRequest()) return;
       worker.terminate();
       workerRef.current = null;
       runtimeReadyRef.current = false;
       setRunState({
         phase: "error",
-        message: event.message || copy.workerFailed,
+        kind: "runtime",
+        message: copy.workerFailed,
         results: [],
       });
       scrollRunFeedbackIntoView();
@@ -2641,7 +2683,7 @@ export default function Home() {
                 <strong>{copy.quickTest}</strong>
                 <span id="editor-help">{testHelp}</span>
               </div>
-              <div className="console-status">
+              <div ref={runStatusRef} className={`console-status ${ideStyles.consoleStatusFocus}`} tabIndex={-1}>
                 {runState.phase === "running" && <i className="spinner" />}
                 <span>{runState.message}</span>
                 {runState.phase === "done" && <small>{Math.round(runState.duration)} ms</small>}
@@ -2672,15 +2714,36 @@ export default function Home() {
               </div>
             )}
 
+            {runtimeFailure && (
+              <div className={`${ideStyles.errorCoach} ${ideStyles.runtimeCoach}`} role="note">
+                <strong>{copy.runtimeFailureTitle}</strong>
+                <span>{copy.runtimeFailureBody}</span>
+                <div className={ideStyles.coachActions}>
+                  <button type="button" onClick={retryTests}>{copy.retryRun}</button>
+                  <button type="button" onClick={() => focusCodeLine(safeActiveCodeLine)}>{copy.backToEditor}</button>
+                </div>
+              </div>
+            )}
+
+            {executionTimeout && (
+              <div className={`${ideStyles.errorCoach} ${ideStyles.timeoutCoach}`} role="note">
+                <strong>{copy.timeoutTitle}</strong>
+                <span>{copy.timeoutBody}</span>
+                <div className={ideStyles.coachActions}>
+                  <button type="button" onClick={() => focusCodeLine(safeActiveCodeLine)}>{copy.backToEditor}</button>
+                </div>
+              </div>
+            )}
+
             {runErrorForCoaching && (
               <div className={ideStyles.errorCoach} role="note">
                 <strong>{language === "zh" ? "先修第一处错误" : "Fix the first error first"}</strong>
                 <span>{beginnerPythonErrorHint(runErrorForCoaching, language)}</span>
-                {runErrorLine && (
-                  <div className={ideStyles.coachActions}>
-                    <button type="button" onClick={() => focusCodeLine(runErrorLine)}>{copy.backToErrorLine(runErrorLine)}</button>
-                  </div>
-                )}
+                <div className={ideStyles.coachActions}>
+                  <button type="button" onClick={() => focusCodeLine(runErrorLine ?? safeActiveCodeLine)}>
+                    {runErrorLine ? copy.backToErrorLine(runErrorLine) : copy.backToEditor}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -2691,6 +2754,7 @@ export default function Home() {
                 <small>{copy.wrongAnswerBody}</small>
                 {coreIdeaLocation === "wrong" && <p id={`wrong-core-idea-${currentProblem.id}`} className={ideStyles.coachMethod}><b>{copy.coreIdea}{language === "zh" ? "：" : ": "}</b>{currentProblem.method}</p>}
                 <div className={ideStyles.coachActions}>
+                  <button type="button" onClick={() => focusCodeLine(safeActiveCodeLine)}>{copy.backToEditor}</button>
                   <button type="button" aria-expanded={coreIdeaLocation === "wrong"} aria-controls={`wrong-core-idea-${currentProblem.id}`} onClick={() => setCoreIdeaLocation((current) => current === "wrong" ? null : "wrong")}>{coreIdeaLocation === "wrong" ? copy.hideCoreIdea : copy.showCoreIdea}</button>
                   <button type="button" onClick={() => saveFailedTestToReview(firstWrongAnswer)}>{copy.saveFailedReview}</button>
                 </div>

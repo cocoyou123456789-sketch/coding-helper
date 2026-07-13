@@ -70,7 +70,10 @@ const darkEditorTheme = EditorView.theme(
       color: "#d4d4d4",
       backgroundColor: "#1e1e1e",
     },
-    "&.cm-focused": { outline: "none" },
+    "&.cm-focused": {
+      outline: "none",
+      boxShadow: "inset 0 0 0 2px #f2a1b9",
+    },
     ".cm-scroller": {
       overflow: "auto",
       fontFamily:
