@@ -16,6 +16,7 @@ const LARGE_STORAGE_DIRECTORY = "study-notes";
 const STORAGE_TRANSACTION_KEY = "tijiebu-storage-transaction-v1";
 const STORAGE_TRANSACTION_PAYLOAD_KEY = "__tijiebu-storage-transaction-payload-v1__";
 const STORAGE_OVERRIDE_PREFIX = "tijiebu-storage-override-v1";
+const BACKGROUND_STAGE_PREFIX = "tijiebu-background-stage-v1";
 const LARGE_MIGRATION_PREFIX = "tijiebu-large-migration-v1";
 const REMINDER_RECONCILIATION_KEY = "tijiebu-reminder-reconciliation-v1";
 export const STUDY_DATA_CLEAR_EVENT = "tijiebu:clear-study-data";
@@ -61,6 +62,11 @@ type StorageOverride =
   | { operation: "set"; value: string }
   | { operation: "remove" };
 
+type BackgroundStage = {
+  version: 1;
+  value: string;
+};
+
 let storageOperationTail: Promise<void> = Promise.resolve();
 
 export function isNativeAppBuild(): boolean {
@@ -79,6 +85,30 @@ function withStorageOperation<T>(operation: () => Promise<T>): Promise<T> {
 
 function storageOverrideKey(key: string): string {
   return `${STORAGE_OVERRIDE_PREFIX}:small:${encodeURIComponent(key)}`;
+}
+
+function backgroundStageKey(key: string): string {
+  return `${BACKGROUND_STAGE_PREFIX}:${encodeURIComponent(key)}`;
+}
+
+function readBackgroundStage(key: string): string | null {
+  const raw = window.localStorage.getItem(backgroundStageKey(key));
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<BackgroundStage>;
+    if (parsed.version === 1 && typeof parsed.value === "string") return parsed.value;
+  } catch {
+    // Fall through to the explicit corruption error below.
+  }
+  throw new Error(`Background storage stage is corrupt for ${key}`);
+}
+
+function writeBackgroundStage(key: string, value: string): void {
+  window.localStorage.setItem(backgroundStageKey(key), JSON.stringify({ version: 1, value } satisfies BackgroundStage));
+}
+
+function clearBackgroundStage(key: string): void {
+  window.localStorage.removeItem(backgroundStageKey(key));
 }
 
 function readStorageOverride(key: string): StorageOverride | null {
@@ -130,6 +160,14 @@ async function syncSmallOverrideDirect(key: string, override: StorageOverride): 
 async function getStoredValueDirect(key: string): Promise<string | null> {
   if (!hasNativeBridge()) return window.localStorage.getItem(key);
 
+  const stagedValue = readBackgroundStage(key);
+  if (stagedValue !== null) {
+    const stagedOverride = { operation: "set", value: stagedValue } satisfies StorageOverride;
+    writeStorageOverride(key, stagedOverride);
+    if (await syncSmallOverrideDirect(key, stagedOverride)) clearBackgroundStage(key);
+    return stagedValue;
+  }
+
   const override = readStorageOverride(key);
   if (override) {
     await syncSmallOverrideDirect(key, override);
@@ -158,6 +196,19 @@ async function setStoredValueDirect(key: string, value: string, requirePrimary =
   if (!hasNativeBridge()) {
     window.localStorage.setItem(key, value);
     return true;
+  }
+
+  const stagedValue = readBackgroundStage(key);
+  if (stagedValue !== null) {
+    if (stagedValue !== value) {
+      if (requirePrimary) throw new Error(`A newer background value is staged for ${key}`);
+      return false;
+    }
+    const stagedOverride = { operation: "set", value } satisfies StorageOverride;
+    writeStorageOverride(key, stagedOverride);
+    const synced = await syncSmallOverrideDirect(key, stagedOverride);
+    if (synced) clearBackgroundStage(key);
+    return synced;
   }
 
   if (!requirePrimary) {
@@ -203,6 +254,8 @@ async function removeStoredValueDirect(key: string, requirePrimary = false): Pro
     window.localStorage.removeItem(key);
     return true;
   }
+
+  clearBackgroundStage(key);
 
   if (!requirePrimary && (readStorageOverride(key) !== null || window.localStorage.getItem(key) !== null)) {
     const tombstone = { operation: "remove" } satisfies StorageOverride;
@@ -251,6 +304,21 @@ export async function setStoredValue(key: string, value: string): Promise<void> 
     await recoverInterruptedStorageTransactionDirect();
     await setStoredValueDirect(key, value);
   });
+}
+
+/**
+ * Stage a small native value synchronously before iOS can suspend the WebView.
+ * The next normal read/write treats this override as authoritative and syncs it
+ * back to Preferences, so a very fast app switch cannot lose the latest edit.
+ */
+export function stageNativeStoredValueForBackground(key: string, value: string): boolean {
+  if (!hasNativeBridge()) return false;
+  try {
+    writeBackgroundStage(key, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function openLargeStorageDatabase(): Promise<IDBDatabase> {
@@ -706,7 +774,7 @@ async function verifyStorageTransactionSnapshotDirect(snapshot: StorageTransacti
     const stored = hasNativeBridge()
       ? await readPreferenceValueDirect(key)
       : window.localStorage.getItem(key);
-    if (stored !== expected || readStorageOverride(key) !== null) {
+    if (stored !== expected || readStorageOverride(key) !== null || readBackgroundStage(key) !== null) {
       throw new Error(`Stored value verification failed for ${key}`);
     }
   }

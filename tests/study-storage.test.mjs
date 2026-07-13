@@ -6,6 +6,7 @@ import {
   normalizeSavedStudy,
   normalizeStudyRecord,
   parseStoredJson,
+  persistLatestSerializedValue,
   persistWithStatus,
 } from "../app/study-storage.ts";
 
@@ -74,4 +75,31 @@ test("invalid saved JSON can be discarded without blocking startup", () => {
 test("storage failures become a visible status instead of an unhandled rejection", async () => {
   assert.equal(await persistWithStatus(async () => undefined), "saved");
   assert.equal(await persistWithStatus(async () => { throw new Error("quota full"); }), "error");
+});
+
+test("an older queued snapshot cannot replace a newer staged edit", async () => {
+  let releaseOldWrite;
+  const oldWriteGate = new Promise((resolve) => {
+    releaseOldWrite = resolve;
+  });
+  let latest = "snapshot A";
+  let durableValue = latest;
+
+  const queuedOldWrite = oldWriteGate.then(() => persistLatestSerializedValue(
+    "snapshot A",
+    () => latest,
+    async (value) => {
+      durableValue = value;
+    },
+  ));
+
+  latest = "snapshot B";
+  durableValue = latest;
+  releaseOldWrite();
+
+  assert.equal(await queuedOldWrite, false);
+  assert.equal(durableValue, "snapshot B");
+  assert.equal(await persistLatestSerializedValue(latest, () => latest, async (value) => {
+    durableValue = value;
+  }), true);
 });

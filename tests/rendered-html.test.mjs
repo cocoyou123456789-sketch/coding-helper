@@ -79,6 +79,9 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(pageSource, /推荐下一题/);
   assert.match(pageSource, /在当前难度和题型中：先续学，再复习，最后开新题/);
   assert.match(pageSource, /按学习状态筛选题目/);
+  assert.match(pageSource, /先把代码外壳找回来/);
+  assert.match(pageSource, /恢复初始代码后，从 pass 那一行开始写/);
+  assert.match(pageSource, /当前代码（包括注释）和逐行解释会被替换/);
   assert.match(pageSource, /保存失败，请先复制重要笔记/);
   assert.match(pageSource, /saveErrorBanner/);
   assert.match(pageSource, /mobile-workspace-tabs/);

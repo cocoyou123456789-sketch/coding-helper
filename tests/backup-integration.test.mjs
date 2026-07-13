@@ -26,6 +26,13 @@ test("full backup is available on web and iOS with verified storage and paused a
   assert.match(page, /advanceStudyDataRevision\(\)/);
   assert.match(page, /hasOtherActiveStudyTab\(\)/);
   assert.match(page, /queuedStudyValueRef/);
+  assert.match(page, /latestStudyValueRef/);
+  assert.match(page, /useLayoutEffect\(\(\) => \{\s*latestStudyValueRef\.current = serializedStudyValue/s);
+  assert.match(page, /stageNativeStoredValueForBackground\(STORAGE_KEY, serialized\)/);
+  assert.equal((page.match(/persistLatestSerializedValue\(/g) ?? []).length, 1);
+  assert.match(page, /window\.addEventListener\("pagehide", flushOnPageHide\)/);
+  assert.match(page, /document\.addEventListener\("visibilitychange", flushWhenHidden\)/);
+  assert.match(page, /queueStorageWrite\(storageWritesRef,[\s\S]*?setStoredValue\(STORAGE_KEY, value\)/);
   assert.match(page, /advanceStudyDataRevision\(\)/);
   assert.match(page, /withStudyDataWriteLock\(async \(\) => \{\s*advanceStudyDataRevision\(\);\s*await operation\(\)/s);
   assert.match(page, /setStorageLoadFailed\(true\)/);

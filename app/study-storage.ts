@@ -26,6 +26,17 @@ export async function persistWithStatus(operation: () => Promise<void>): Promise
   }
 }
 
+/** Skip a debounced snapshot that became stale while it was waiting in a write queue. */
+export async function persistLatestSerializedValue(
+  candidate: string,
+  latestValue: () => string,
+  persist: (value: string) => Promise<void>,
+): Promise<boolean> {
+  if (candidate !== latestValue()) return false;
+  await persist(candidate);
+  return true;
+}
+
 const VALID_STATUSES = new Set<LearningStatus>(["todo", "learning", "solved", "review"]);
 
 function objectValue(value: unknown): Record<string, unknown> | null {

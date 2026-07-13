@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Capacitor } from "@capacitor/core";
+import { Preferences } from "@capacitor/preferences";
 
 const DATABASE_NAME = "tijiebu-study-files-v1";
 const OBJECT_STORE_NAME = "documents";
@@ -242,4 +244,48 @@ test("a fresh module recovers a prepared journal when both the target write and 
   assert.equal(await restartedStorage.getLargeStoredValue("study-large"), "old large value");
   assert.equal(localStorage.getItem(JOURNAL_KEY), null);
   assert.equal(indexedDB.getValue(JOURNAL_PAYLOAD_KEY), null);
+});
+
+test("a staged native background snapshot cannot be replaced by an older in-flight write", async () => {
+  const originalNativePlatform = Capacitor.isNativePlatform;
+  const originalGet = Preferences.get;
+  const originalSet = Preferences.set;
+  const originalRemove = Preferences.remove;
+  const previousNativeBuild = process.env.NEXT_PUBLIC_NATIVE_APP;
+  const localStorage = new MemoryStorage();
+  const preferenceValues = new Map();
+
+  try {
+    globalThis.window = Object.assign(new EventTarget(), {
+      localStorage,
+      indexedDB: new MemoryIndexedDB(),
+      setTimeout: globalThis.setTimeout.bind(globalThis),
+    });
+    process.env.NEXT_PUBLIC_NATIVE_APP = "true";
+    Capacitor.isNativePlatform = () => true;
+    Preferences.get = async ({ key }) => {
+      return { value: preferenceValues.get(key) ?? null };
+    };
+    Preferences.set = async ({ key, value }) => {
+      preferenceValues.set(key, value);
+    };
+    Preferences.remove = async ({ key }) => {
+      preferenceValues.delete(key);
+    };
+
+    const storage = await importFreshStorageModule();
+    assert.equal(storage.stageNativeStoredValueForBackground("study", "snapshot B"), true);
+    await storage.setStoredValue("study", "snapshot A");
+
+    assert.equal(preferenceValues.get("study"), undefined);
+    assert.match(localStorage.getItem("tijiebu-background-stage-v1:study") ?? "", /snapshot B/);
+    assert.equal(await storage.getStoredValue("study"), "snapshot B");
+  } finally {
+    Capacitor.isNativePlatform = originalNativePlatform;
+    Preferences.get = originalGet;
+    Preferences.set = originalSet;
+    Preferences.remove = originalRemove;
+    if (previousNativeBuild === undefined) delete process.env.NEXT_PUBLIC_NATIVE_APP;
+    else process.env.NEXT_PUBLIC_NATIVE_APP = previousNativeBuild;
+  }
 });

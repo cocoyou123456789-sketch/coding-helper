@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import backupStyles from "./backup-settings.module.css";
 import {
   syncLineNotes,
@@ -36,6 +36,7 @@ import {
   saveDailyReminder,
   setStoredValue,
   shareStudyNote,
+  stageNativeStoredValueForBackground,
   writeStoredStudySnapshot,
   type DailyReminder,
   type ReminderSaveResult,
@@ -54,7 +55,7 @@ import {
 } from "./practice-library";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
-import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, solutionErrorLine, starterPlaceholderLine } from "./run-session";
+import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, pythonSourceIsEmpty, solutionErrorLine, starterPlaceholderLine, starterRecoveryNeedsConfirmation } from "./run-session";
 import {
   createStudyBackup,
   MAX_STUDY_BACKUP_BYTES,
@@ -84,6 +85,7 @@ import {
   normalizeSavedStudy,
   normalizeStudyRecord,
   parseStoredJson,
+  persistLatestSerializedValue,
   persistWithStatus,
   type LearningStatus,
   type SaveState,
@@ -313,7 +315,12 @@ const pageCopy = {
     difficultyLabels: { 简单: "简单", 中等: "中等", 困难: "困难" } as Record<Problem["difficulty"], string>,
     notRun: "还没有运行测试",
     resetMessage: "代码已恢复，还没有运行测试",
-    resetConfirm: "确定恢复初始代码吗？逐行解释会清空，解题思路和复盘会保留。",
+    resetConfirm: "确定恢复初始代码吗？当前代码（包括注释）和逐行解释会被替换，解题思路和复盘会保留。",
+    emptyCodeMessage: "代码还是空的，先恢复题目给你的函数外壳。",
+    emptyCodeTitle: "先把代码外壳找回来",
+    emptyCodeBody: "空白或只有注释时，测试不知道该调用哪个函数。恢复初始代码后，从 pass 那一行开始写。",
+    restoreStarter: "恢复初始代码",
+    backToEditor: "回到代码编辑器",
     starterPrompt: (line: number) => `先把第 ${line} 行的 pass 换成你的解法，再运行测试。`,
     starterCoachTitle: "这行还是占位符",
     starterCoachBody: "pass 不会返回答案。可以先看一步思路，也可以继续运行，亲眼看看它会得到什么结果。",
@@ -543,7 +550,12 @@ const pageCopy = {
     difficultyLabels: { 简单: "Easy", 中等: "Medium", 困难: "Hard" } as Record<Problem["difficulty"], string>,
     notRun: "No tests run yet",
     resetMessage: "Starter code restored; no tests run yet",
-    resetConfirm: "Restore the starter code? Line explanations will be cleared; your approach and review will stay.",
+    resetConfirm: "Restore the starter code? Current code (including comments) and line explanations will be replaced; your approach and review will stay.",
+    emptyCodeMessage: "The editor is empty. Restore the function shell before running tests.",
+    emptyCodeTitle: "Restore the code shell first",
+    emptyCodeBody: "With only whitespace or comments, the tests do not know which function to call. Restore the starter, then begin at pass.",
+    restoreStarter: "Restore starter code",
+    backToEditor: "Back to the editor",
     starterPrompt: (line: number) => `Replace pass on line ${line} with your solution before running tests.`,
     starterCoachTitle: "This line is still a placeholder",
     starterCoachBody: "pass returns no answer. Reveal one step of the idea, or run it anyway to see exactly what the placeholder produces.",
@@ -776,6 +788,7 @@ export default function Home() {
   const [showStatement, setShowStatement] = useState(true);
   const [coreIdeaLocation, setCoreIdeaLocation] = useState<"problem" | "starter" | "wrong" | null>(null);
   const [starterPromptLine, setStarterPromptLine] = useState<number | null>(null);
+  const [sourceIssue, setSourceIssue] = useState<"empty" | null>(null);
   const [showProblemList, setShowProblemList] = useState(false);
   const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
@@ -805,6 +818,8 @@ export default function Home() {
   const staleCapturePromiseRef = useRef<Promise<Record<string, string>> | null>(null);
   const storageWritesRef = useRef<Promise<void>>(Promise.resolve());
   const queuedStudyValueRef = useRef<string | null>(null);
+  const latestStudyValueRef = useRef("");
+  const hydratedRef = useRef(false);
   const queuedFontValueRef = useRef<string | null>(null);
   const queuedProfileValueRef = useRef<string | null>(null);
   const queuedLanguageValueRef = useRef<string | null>(null);
@@ -855,7 +870,10 @@ export default function Home() {
   );
   const currentRecord = normalizeStudyRecord(currentProblem, records[currentProblem.id]);
   const currentDetail = localizeDetail(currentProblem, language);
+  const officialProblemUrl = `${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`;
+  const serializedStudyValue = JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId });
   const codeLines = currentRecord.code.split("\n");
+  const emptyRecoveryNeedsConfirmation = starterRecoveryNeedsConfirmation(currentRecord.code, currentRecord.lineNotes);
   const safeActiveCodeLine = Math.min(Math.max(1, activeCodeLine), codeLines.length);
   const noteLineIndexes = noteLineMode === "current"
     ? [safeActiveCodeLine - 1]
@@ -1108,6 +1126,7 @@ export default function Home() {
       setActiveCodeLine(1);
       setShowStatement(true);
       setStarterPromptLine(null);
+      setSourceIssue(null);
       setCoreIdeaLocation(null);
       setShowProblemList(false);
       setShowNotesDrawer(false);
@@ -1119,9 +1138,14 @@ export default function Home() {
     return () => window.removeEventListener("popstate", restoreNavigationFromHistory);
   }, []);
 
+  useLayoutEffect(() => {
+    latestStudyValueRef.current = serializedStudyValue;
+    hydratedRef.current = hydrated;
+  }, [hydrated, serializedStudyValue]);
+
   useEffect(() => {
     if (!hydrated || dataOperationRef.current) return;
-    const serialized = JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId });
+    const serialized = serializedStudyValue;
     if (serialized === queuedStudyValueRef.current) return;
     queuedStudyValueRef.current = serialized;
     const sequence = ++saveSequenceRef.current;
@@ -1133,7 +1157,11 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       if (dataOperationRef.current) return;
       void persistWithStatus(() => queueStorageWrite(storageWritesRef, async () => {
-        await setStoredValue(STORAGE_KEY, serialized);
+        await persistLatestSerializedValue(
+          serialized,
+          () => latestStudyValueRef.current,
+          (value) => setStoredValue(STORAGE_KEY, value),
+        );
       }))
         .then((result) => {
           if (!cancelled && saveSequenceRef.current === sequence) setSaveState(result);
@@ -1144,7 +1172,35 @@ export default function Home() {
       window.clearTimeout(savingTimer);
       window.clearTimeout(timer);
     };
-  }, [hydrated, records, selectedId]);
+  }, [hydrated, serializedStudyValue]);
+
+  useEffect(() => {
+    const flushLatestStudyValue = async () => {
+      if (!hydratedRef.current || dataOperationRef.current || !latestStudyValueRef.current) return;
+      const serialized = latestStudyValueRef.current;
+      queuedStudyValueRef.current = serialized;
+      stageNativeStoredValueForBackground(STORAGE_KEY, serialized);
+      const sequence = saveSequenceRef.current;
+      const result = await persistWithStatus(() => queueStorageWrite(storageWritesRef, async () => {
+        await setStoredValue(STORAGE_KEY, serialized);
+      }));
+      if (saveSequenceRef.current === sequence) setSaveState(result);
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") void flushLatestStudyValue();
+    };
+    const flushOnPageHide = () => {
+      void flushLatestStudyValue();
+    };
+
+    window.addEventListener("pagehide", flushOnPageHide);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flushOnPageHide);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      void flushLatestStudyValue();
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
@@ -1376,6 +1432,10 @@ export default function Home() {
     focusMobileWorkspaceHeading(problemHeadingRef);
   }
 
+  function openOfficialProblemPage() {
+    void openExternalPage(officialProblemUrl);
+  }
+
   function openProblemFromPath(id: number) {
     void loadCodeEditor();
     chooseProblem(id, false);
@@ -1405,6 +1465,7 @@ export default function Home() {
     if (updateHistory) writeNavigationState({ mode: "workspace", problemId: id }, "push");
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setStarterPromptLine(null);
+    setSourceIssue(null);
     setCoreIdeaLocation(null);
     setNoteTab("line");
     setNoteLineMode("current");
@@ -1471,6 +1532,7 @@ export default function Home() {
     setLanguage(nextLanguage);
     setTopic("all");
     setStarterPromptLine(null);
+    setSourceIssue(null);
     setCoreIdeaLocation(null);
     setRunState({ phase: "idle", message: pageCopy[nextLanguage].notRun, results: [] });
   }
@@ -1881,15 +1943,22 @@ export default function Home() {
     focusRecognitionSignal();
   }
 
-  function resetCode() {
-    if (!window.confirm(copy.resetConfirm)) return;
+  function restoreStarterCode(askForConfirmation: boolean, focusStarter: boolean) {
+    if (askForConfirmation && !window.confirm(copy.resetConfirm)) return;
     cancelActiveRun();
     updateRecord({ code: currentProblem.starterCode, lineNotes: [] });
     setStarterPromptLine(null);
+    setSourceIssue(null);
     setCoreIdeaLocation(null);
     setNoteLineMode("current");
-    selectCodeLine(1);
+    const starterLine = starterPlaceholderLine(currentProblem.starterCode, currentProblem.starterCode) ?? 1;
+    setActiveCodeLine(focusStarter ? starterLine : 1);
     setRunState({ phase: "idle", message: copy.resetMessage, results: [] });
+    window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(focusStarter ? starterLine : 1, { focus: focusStarter }));
+  }
+
+  function resetCode() {
+    restoreStarterCode(true, false);
   }
 
   function markCurrentProblemSolved() {
@@ -1923,6 +1992,7 @@ export default function Home() {
     cancelActiveRun();
     markStudyDirty();
     setStarterPromptLine(null);
+    setSourceIssue(null);
     setCoreIdeaLocation((current) => current === "problem" ? current : null);
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setRecords((previous) => {
@@ -1947,6 +2017,15 @@ export default function Home() {
   function runTests(options?: { allowPlaceholder?: boolean }) {
     if (runState.phase === "running" || activeRunRef.current) return;
 
+    if (pythonSourceIsEmpty(currentRecord.code)) {
+      setStarterPromptLine(null);
+      setSourceIssue("empty");
+      setCoreIdeaLocation(null);
+      setRunState({ phase: "idle", message: copy.emptyCodeMessage, results: [] });
+      revealRunOutcome();
+      return;
+    }
+
     const placeholderLine = starterPlaceholderLine(currentRecord.code, currentProblem.starterCode);
     if (placeholderLine !== null && options?.allowPlaceholder !== true) {
       setStarterPromptLine(placeholderLine);
@@ -1963,6 +2042,7 @@ export default function Home() {
     const worker = workerRef.current ?? new Worker(`${basePath}/python-worker.js`);
     workerRef.current = worker;
     setStarterPromptLine(null);
+    setSourceIssue(null);
     setCoreIdeaLocation((current) => current === "problem" ? current : null);
     setRunState({ phase: "running", message: copy.loadingPython, results: [] });
     updateRecord({ status: practiceStatusAfterActivity(currentRecord.status, "run") });
@@ -2239,10 +2319,14 @@ export default function Home() {
               <span aria-hidden="true">✎</span>
               <span>{language === "zh" ? "笔记" : "Notes"}</span>
             </button>
-            {!nativeApp && (
+            {nativeApp ? (
+              <button type="button" className={ideStyles.officialButton} onClick={openOfficialProblemPage}>
+                {copy.openOfficialProblem}<span aria-hidden="true">↗</span>
+              </button>
+            ) : (
               <a
                 className={ideStyles.officialButton}
-                href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`}
+                href={officialProblemUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -2417,7 +2501,7 @@ export default function Home() {
               <span>{nativeApp ? "ALGORITHM 101" : "HOT 100 + EXTRA"} / {currentProblem.topic}</span>
               {!nativeApp && (
                 <cite className="problem-source">
-                  <a href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`} target="_blank" rel="noreferrer">
+                  <a href={officialProblemUrl} target="_blank" rel="noreferrer">
                     {copy.officialProblem(currentProblem.id, currentProblem.title)}
                   </a>
                 </cite>
@@ -2523,8 +2607,12 @@ export default function Home() {
               <button className="run-button" type="button" onClick={() => runTests()} disabled={runState.phase === "running"}>
                 <span aria-hidden="true">▶</span>{runState.phase === "running" ? copy.running : copy.run}
               </button>
-              {!nativeApp && (
-                <a className={`${ideStyles.officialButton} ${ideStyles.editorSubmit}`} href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`} target="_blank" rel="noreferrer">
+              {nativeApp ? (
+                <button type="button" className={`${ideStyles.officialButton} ${ideStyles.editorSubmit}`} onClick={openOfficialProblemPage}>
+                  {language === "zh" ? "原题" : "Official"}<span aria-hidden="true">↗</span>
+                </button>
+              ) : (
+                <a className={`${ideStyles.officialButton} ${ideStyles.editorSubmit}`} href={officialProblemUrl} target="_blank" rel="noreferrer">
                   {language === "zh" ? "提交" : "Submit"}<span aria-hidden="true">↗</span>
                 </a>
               )}
@@ -2559,6 +2647,17 @@ export default function Home() {
                 {runState.phase === "done" && <small>{Math.round(runState.duration)} ms</small>}
               </div>
             </div>
+
+            {sourceIssue === "empty" && (
+              <div className={`${ideStyles.errorCoach} ${ideStyles.emptySourceCoach}`} role="note">
+                <strong>{copy.emptyCodeTitle}</strong>
+                <span>{copy.emptyCodeBody}</span>
+                <div className={ideStyles.coachActions}>
+                  <button type="button" onClick={() => restoreStarterCode(emptyRecoveryNeedsConfirmation, true)}>{copy.restoreStarter}</button>
+                  <button type="button" onClick={() => focusCodeLine(1)}>{copy.backToEditor}</button>
+                </div>
+              </div>
+            )}
 
             {starterPromptLine !== null && (
               <div className={`${ideStyles.errorCoach} ${ideStyles.starterCoach}`} role="note">
@@ -2712,9 +2811,13 @@ export default function Home() {
                       <span className={ideStyles.completionMarker} aria-hidden="true">3</span>
                       <div>
                         <strong>{nativeApp ? copy.nativeCompletionSubmit : copy.completionSubmit}</strong>
-                        {!nativeApp && (
+                        {nativeApp ? (
+                          <button type="button" onClick={openOfficialProblemPage}>
+                            {copy.openOfficialProblem}<span aria-hidden="true"> ↗</span>
+                          </button>
+                        ) : (
                           <a
-                            href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`}
+                            href={officialProblemUrl}
                             target="_blank"
                             rel="noreferrer"
                           >

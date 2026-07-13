@@ -6,9 +6,25 @@ import {
   beginnerPythonErrorHint,
   describeFirstMismatch,
   messageBelongsToRun,
+  pythonSourceIsEmpty,
   solutionErrorLine,
   starterPlaceholderLine,
+  starterRecoveryNeedsConfirmation,
 } from "../app/run-session.ts";
+
+test("blank or comment-only Python is stopped before the worker runs", () => {
+  assert.equal(pythonSourceIsEmpty(""), true);
+  assert.equal(pythonSourceIsEmpty("  \n\t\n# still planning\n    # another note"), true);
+  assert.equal(pythonSourceIsEmpty("class Solution:\n    pass"), false);
+  assert.equal(pythonSourceIsEmpty("# plan\nanswer = 1"), false);
+});
+
+test("restoring comment plans or line notes always asks before replacing them", () => {
+  assert.equal(starterRecoveryNeedsConfirmation("", []), false);
+  assert.equal(starterRecoveryNeedsConfirmation("  \n", ["", "  "]), false);
+  assert.equal(starterRecoveryNeedsConfirmation("# my approach", []), true);
+  assert.equal(starterRecoveryNeedsConfirmation("", ["keep this explanation"]), true);
+});
 
 test("starter placeholder remains visible after harmless edits", () => {
   const starter = "class Solution:\n    def solve(self):\n        # write here\n        pass";

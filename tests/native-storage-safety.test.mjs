@@ -36,3 +36,11 @@ test("reminder side effects have a persisted startup reconciliation path", () =>
   assert.match(nativeStorage, /await recoverInterruptedStudyDataWrite\(\)\.catch/);
   assert.match(nativeStorage, /scheduleDailyReminderNotification\(reminder, language\)/);
 });
+
+test("native background saves synchronously stage the latest small value", () => {
+  assert.match(nativeStorage, /export function stageNativeStoredValueForBackground/);
+  assert.match(nativeStorage, /writeBackgroundStage\(key, value\)/);
+  assert.match(nativeStorage, /if \(!hasNativeBridge\(\)\) return false/);
+  assert.match(nativeStorage, /if \(stagedValue !== value\)/);
+  assert.match(nativeStorage, /readBackgroundStage\(key\)/);
+});

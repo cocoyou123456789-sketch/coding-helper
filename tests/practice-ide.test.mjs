@@ -36,6 +36,9 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /tabIndex=\{mobileWorkspaceTab === "code" \? 0 : -1\}/);
   assert.match(page, /aria-labelledby="mobile-code-tab"/);
   assert.match(page, /starterPlaceholderLine/);
+  assert.match(page, /pythonSourceIsEmpty/);
+  assert.match(page, /setSourceIssue\("empty"\)/);
+  assert.match(page, /restoreStarterCode\(emptyRecoveryNeedsConfirmation, true\)/);
   assert.match(page, /describeFirstMismatch/);
   assert.match(page, /saveFailedTestToReview/);
   assert.match(page, /onClick=\{\(\) => runTests\(\)\}/);
@@ -76,6 +79,8 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /aria-pressed=\{statusFilter === status\}/);
   assert.match(page, /aria-live="polite" aria-atomic="true"/);
   assert.match(page, /openRecommendedPractice/);
+  assert.match(page, /function openOfficialProblemPage\(\)[\s\S]*?openExternalPage\(officialProblemUrl\)/);
+  assert.match(page, /onClick=\{openOfficialProblemPage\}/);
   assert.match(page, /updateRecord\(\{ code: currentProblem\.starterCode, lineNotes: \[\] \}\)/);
   assert.doesNotMatch(page, /if \(allPassed\) updateRecord\(\{ status: "solved" \}\)/);
   assert.doesNotMatch(page, /code: currentProblem\.starterCode, lineNotes: \[\], status: "todo"/);
@@ -97,6 +102,7 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.notesDrawer/);
   assert.match(styles, /--ide-caption: max\(12px/);
   assert.match(styles, /\.errorCoach/);
+  assert.match(styles, /\.emptySourceCoach/);
   assert.match(styles, /\.wrongAnswerCoach/);
   assert.match(styles, /\.methodDisclosure/);
   assert.match(styles, /scroll-margin-top: calc\(64px \+ env\(safe-area-inset-top\)\)/);
@@ -110,4 +116,6 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.libraryEmpty/);
   assert.match(styles, /\.editorLoading/);
   assert.match(styles, /@media \(max-width: 760px\)/);
+  assert.match(styles, /\.editorToolbar \{[\s\S]*?position: sticky;[\s\S]*?env\(safe-area-inset-top\)/);
+  assert.match(styles, /\.testConsole \{[\s\S]*?scroll-margin-top: calc\(180px \+ env\(safe-area-inset-top\)\)/);
 });

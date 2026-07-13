@@ -6,6 +6,24 @@ type WorkerMessageLike = {
   phase?: unknown;
 };
 
+/** Treat whitespace and Python comments as an empty attempt before starting the worker. */
+export function pythonSourceIsEmpty(value: unknown): boolean {
+  if (typeof value !== "string") return true;
+  return !value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .some((line) => {
+      const trimmed = line.trim();
+      return Boolean(trimmed && !trimmed.startsWith("#"));
+    });
+}
+
+export function starterRecoveryNeedsConfirmation(code: unknown, lineNotes: readonly unknown[]): boolean {
+  const hasCodeText = typeof code === "string" && Boolean(code.trim());
+  const hasLineNotes = lineNotes.some((note) => typeof note === "string" && Boolean(note.trim()));
+  return hasCodeText || hasLineNotes;
+}
+
 /**
  * Find a starter `pass` that is still present at the original body indentation.
  * Comments and blank lines may change without hiding the beginner prompt; a nested,

@@ -415,6 +415,15 @@
   color: #f5dc83;
 }
 
+.emptySourceCoach {
+  background: rgba(68, 112, 145, 0.2);
+  border-color: rgba(126, 184, 224, 0.38);
+}
+
+.emptySourceCoach strong {
+  color: #b9ddf5;
+}
+
 .wrongAnswerCoach {
   background: rgba(159, 94, 44, 0.18);
   border-color: rgba(237, 164, 102, 0.34);
@@ -1122,6 +1131,7 @@
     display: flex;
     height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .problemPane {
@@ -1148,6 +1158,32 @@
   .editorHost,
   .testConsole {
     width: 100%;
+  }
+
+  .editorToolbar {
+    box-shadow: 0 7px 18px rgba(12, 12, 12, 0.24);
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 110px;
+    position: sticky;
+    top: calc(62px + env(safe-area-inset-top));
+    z-index: 4;
+  }
+
+  .editorToolbar :global(.editor-meta),
+  .editorToolbar :global(.editor-actions) {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .editorToolbar :global(button),
+  .editorToolbar :global(a) {
+    white-space: nowrap;
+  }
+
+  .testConsole {
+    scroll-margin-top: calc(180px + env(safe-area-inset-top));
   }
 
   .editorHost {
