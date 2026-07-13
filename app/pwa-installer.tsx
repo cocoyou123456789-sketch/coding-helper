@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Language } from "./problem-i18n";
+import { useDialogFocus } from "./use-dialog-focus";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -62,6 +63,7 @@ export default function PwaInstaller({ language }: { language: Language }) {
   const [isIos, setIsIos] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const copy = installCopy[language];
+  const installDialogRef = useDialogFocus<HTMLElement>(showHelp, () => setShowHelp(false));
 
   useEffect(() => {
     if (nativeBuild) return;
@@ -148,8 +150,8 @@ export default function PwaInstaller({ language }: { language: Language }) {
         </button>
       )}
       {showHelp && (
-        <div className="install-backdrop" role="presentation" onMouseDown={() => setShowHelp(false)}>
-          <section className="install-dialog" role="dialog" aria-modal="true" aria-labelledby="install-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="install-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHelp(false); }}>
+          <section ref={installDialogRef} tabIndex={-1} className="install-dialog" role="dialog" aria-modal="true" aria-labelledby="install-title">
             <div className="install-icon" aria-hidden="true">{"{ }"}</div>
             <h2 id="install-title">{copy.title}</h2>
             <p>{copy.intro}</p>

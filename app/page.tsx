@@ -40,6 +40,7 @@ import {
   type StudyRecords,
 } from "./study-storage";
 import { nextTabIndex } from "./tab-navigation";
+import { useDialogFocus } from "./use-dialog-focus";
 
 const loadCourseNotes = () => import("./course-notes");
 const loadCodeEditor = () => import("./leetcode-code-editor");
@@ -527,6 +528,8 @@ export default function Home() {
   const notesButtonRef = useRef<HTMLButtonElement | null>(null);
   const libraryDrawerRef = useRef<HTMLElement | null>(null);
   const notesDrawerRef = useRef<HTMLElement | null>(null);
+  const nativeSettingsDialogRef = useDialogFocus<HTMLElement>(showNativeSettings, () => setShowNativeSettings(false));
+  const guideDialogRef = useDialogFocus<HTMLElement>(showGuide, () => setShowGuide(false));
 
   const copy = pageCopy[language];
   const brandSubtitle = nativeApp ? copy.nativeBrandSubtitle : copy.brandSubtitle;
@@ -1660,8 +1663,8 @@ export default function Home() {
       )}
 
       {nativeApp && showNativeSettings && (
-        <div className="native-settings-backdrop" role="presentation" onMouseDown={() => setShowNativeSettings(false)}>
-          <section className="native-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="native-settings-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="native-settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNativeSettings(false); }}>
+          <section ref={nativeSettingsDialogRef} tabIndex={-1} className="native-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="native-settings-title">
             <div className="native-settings-handle" aria-hidden="true" />
             <button className="guide-close" type="button" aria-label={copy.closeSettings} onClick={() => setShowNativeSettings(false)}>×</button>
             <div className="section-kicker">ON-DEVICE STUDY</div>
@@ -1705,8 +1708,8 @@ export default function Home() {
       )}
 
       {showGuide && (
-        <div className="guide-backdrop" role="presentation" onMouseDown={() => setShowGuide(false)}>
-          <section className="guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="guide-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowGuide(false); }}>
+          <section ref={guideDialogRef} tabIndex={-1} className="guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title">
             <button className="guide-close" type="button" aria-label={language === "zh" ? "关闭" : "Close"} onClick={() => setShowGuide(false)}>×</button>
             <div className="section-kicker">START HERE</div>
             <h2 id="guide-title">{copy.guideTitle}</h2>
