@@ -699,11 +699,12 @@ export default function CourseNotes({ language, nativeApp }: Props) {
               <div className={styles.notebooks}>
                 <section className={styles.notebookCard}>
                   <div className={styles.notebookHead}>
-                    <div><span className={styles.step}>03</span><h2>{text.transcriptTitle}</h2></div>
+                    <div><span className={styles.step}>03</span><h2 id="course-transcript-heading">{text.transcriptTitle}</h2></div>
                     <button type="button" onClick={clearTranscript}>{text.clearTranscript}</button>
                   </div>
                   <p>{text.transcriptHelp}</p>
                   <textarea
+                    aria-labelledby="course-transcript-heading"
                     value={activeCourse.transcript}
                     maxLength={MAX_COURSE_TEXT_LENGTH}
                     onChange={(event) => updateCourse(activeCourse.id, { transcript: event.target.value })}
@@ -715,10 +716,11 @@ export default function CourseNotes({ language, nativeApp }: Props) {
 
                 <section className={`${styles.notebookCard} ${styles.personalNotes}`}>
                   <div className={styles.notebookHead}>
-                    <div><span className={styles.step}>04</span><h2>{text.notesTitle}</h2></div>
+                    <div><span className={styles.step}>04</span><h2 id="course-personal-notes-heading">{text.notesTitle}</h2></div>
                   </div>
                   <p>{text.notesHelp}</p>
                   <textarea
+                    aria-labelledby="course-personal-notes-heading"
                     value={activeCourse.notes}
                     maxLength={MAX_COURSE_TEXT_LENGTH}
                     onChange={(event) => updateCourse(activeCourse.id, { notes: event.target.value })}

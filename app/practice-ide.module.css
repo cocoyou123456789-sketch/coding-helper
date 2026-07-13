@@ -265,6 +265,53 @@
   font-size: var(--ide-body);
 }
 
+.hintCoach {
+  display: grid;
+  gap: 7px;
+}
+
+.hintCoach :global(.hint-row) {
+  margin-bottom: 0;
+}
+
+.methodToggle {
+  background: transparent;
+  border: 1px solid #5c4650;
+  border-radius: 7px;
+  color: #f1b2c3;
+  font-size: var(--ide-small);
+  font-weight: 750;
+  justify-self: start;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.methodToggle:hover {
+  background: #33272c;
+  border-color: #a66c7d;
+}
+
+.methodDisclosure {
+  background: #272326;
+  border: 1px solid #473a40;
+  border-radius: 8px;
+  color: #ded5d9;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+}
+
+.methodDisclosure strong {
+  color: #ffb4c6;
+  font-size: var(--ide-small);
+}
+
+.methodDisclosure p {
+  font-size: var(--ide-body);
+  line-height: 1.55;
+  margin: 0;
+}
+
 .editorToolbar {
   background: #262626;
   border-bottom-color: #383838;
@@ -351,6 +398,63 @@
 .errorCoach span {
   font-size: var(--ide-caption);
   line-height: 1.55;
+}
+
+.errorCoach > small {
+  color: #cdbfc4;
+  font-size: var(--ide-caption);
+  line-height: 1.55;
+}
+
+.starterCoach {
+  background: rgba(102, 91, 45, 0.22);
+  border-color: rgba(225, 197, 90, 0.34);
+}
+
+.starterCoach strong {
+  color: #f5dc83;
+}
+
+.wrongAnswerCoach {
+  background: rgba(159, 94, 44, 0.18);
+  border-color: rgba(237, 164, 102, 0.34);
+}
+
+.wrongAnswerCoach strong {
+  color: #ffc292;
+}
+
+.coachMethod {
+  background: rgba(255, 255, 255, 0.055);
+  border-radius: 6px;
+  color: #f0e5e9;
+  font-size: var(--ide-caption);
+  line-height: 1.55;
+  margin: 4px 0 0;
+  padding: 7px 8px;
+}
+
+.coachActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.coachActions button {
+  background: #373033;
+  border: 1px solid #665159;
+  border-radius: 7px;
+  color: #ffe5ed;
+  font-size: var(--ide-caption);
+  font-weight: 750;
+  min-height: 34px;
+  padding: 0 9px;
+}
+
+.coachActions button:hover {
+  background: #49383f;
+  border-color: #a97988;
 }
 
 .focusPanel :global(.dark-button),
@@ -649,6 +753,11 @@
     padding: 15px;
   }
 
+  .problemPane :global(.brief-title-row h2),
+  .testConsole {
+    scroll-margin-top: calc(64px + env(safe-area-inset-top));
+  }
+
   .editorToolbar,
   .editorHost,
   .testConsole {
@@ -666,6 +775,11 @@
 
   .languageSelect {
     font-size: max(16px, 0.625rem);
+    min-height: 44px;
+  }
+
+  .methodToggle,
+  .coachActions button {
     min-height: 44px;
   }
 

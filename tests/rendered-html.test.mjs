@@ -88,6 +88,8 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(courseSource, /开始听写/);
   assert.match(courseSource, /不下载视频/);
   assert.match(courseSource, /loading="lazy"/);
+  assert.match(courseSource, /aria-labelledby="course-transcript-heading"/);
+  assert.match(courseSource, /aria-labelledby="course-personal-notes-heading"/);
   assert.match(speechSource, /webkitSpeechRecognition/);
   assert.match(speechSource, /NativeSpeechRecognition/);
   assert.match(pwaSource, /serviceWorker\.register/);
@@ -112,4 +114,17 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   await access(new URL("../public/icons/icon-512.png", import.meta.url));
   await access(new URL("../public/icons/icon-maskable-512.png", import.meta.url));
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
+});
+
+test("course note inputs stay named, tappable, and above the iOS zoom threshold", async () => {
+  const [source, styles] = await Promise.all([
+    readFile(new URL("../app/course-notes.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/course-notes.module.css", import.meta.url), "utf8"),
+  ]);
+  const baseStyles = styles.split("@media")[0];
+
+  assert.match(source, /aria-labelledby="course-transcript-heading"/);
+  assert.match(source, /aria-labelledby="course-personal-notes-heading"/);
+  assert.match(baseStyles, /\.notebookCard textarea[\s\S]*font-size: max\(16px, 0\.86rem\)/);
+  assert.match(baseStyles, /\.notebookHead button[\s\S]*min-height: 44px/);
 });

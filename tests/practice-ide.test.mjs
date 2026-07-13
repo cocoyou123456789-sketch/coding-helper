@@ -35,7 +35,18 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /正在恢复这台设备上的学习记录/);
   assert.match(page, /tabIndex=\{mobileWorkspaceTab === "code" \? 0 : -1\}/);
   assert.match(page, /aria-labelledby="mobile-code-tab"/);
-  assert.match(page, /untouchedStarterLine/);
+  assert.match(page, /starterPlaceholderLine/);
+  assert.match(page, /describeFirstMismatch/);
+  assert.match(page, /saveFailedTestToReview/);
+  assert.match(page, /onClick=\{\(\) => runTests\(\)\}/);
+  assert.match(page, /onRun=\{\(\) => runTests\(\)\}/);
+  assert.match(page, /runTests\(\{ allowPlaceholder: true \}\)/);
+  assert.match(page, /testConsoleRef\.current\?\.scrollIntoView/);
+  assert.match(page, /problemHeadingRef\.current\?\.focus/);
+  assert.match(page, /revealLine\(nextLine, \{ focus: false \}\)/);
+  assert.match(page, /revealLine\(safeActiveCodeLine, \{ focus: false \}\)/);
+  assert.match(page, /aria-controls=\{`starter-core-idea-/);
+  assert.match(page, /aria-controls=\{`wrong-core-idea-/);
   assert.match(page, /lineNotes: \[\]/);
   assert.match(page, /markCurrentProblemSolved/);
   assert.doesNotMatch(page, /if \(allPassed\) updateRecord\(\{ status: "solved" \}\)/);
@@ -49,11 +60,15 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(editor, /indentWithTab/);
   assert.match(editor, /onCursorLineChangeRef/);
   assert.match(editor, /update\.selectionSet/);
+  assert.match(editor, /options\?\.focus !== false/);
 
   assert.match(styles, /grid-template-columns: minmax\(330px, 42%\)/);
   assert.match(styles, /\.notesDrawer/);
   assert.match(styles, /--ide-caption: max\(12px/);
   assert.match(styles, /\.errorCoach/);
+  assert.match(styles, /\.wrongAnswerCoach/);
+  assert.match(styles, /\.methodDisclosure/);
+  assert.match(styles, /scroll-margin-top: calc\(64px \+ env\(safe-area-inset-top\)\)/);
   assert.match(styles, /\.lineNoteNavigator/);
   assert.match(styles, /\.navigatorActive/);
   assert.match(styles, /\.editorLoading/);

@@ -33,7 +33,7 @@ export interface LeetCodeCodeEditorHandle {
   focus: () => void;
   indent: () => boolean;
   outdent: () => boolean;
-  revealLine: (lineNumber: number) => void;
+  revealLine: (lineNumber: number, options?: { focus?: boolean }) => void;
 }
 
 export interface LeetCodeCodeEditorProps {
@@ -341,7 +341,7 @@ export const LeetCodeCodeEditor = forwardRef<
     outdent() {
       return viewRef.current ? indentLess(viewRef.current) : false;
     },
-    revealLine(lineNumber) {
+    revealLine(lineNumber, options) {
       const view = viewRef.current;
       if (!view || !Number.isInteger(lineNumber)) return;
       const safeLineNumber = Math.min(Math.max(1, lineNumber), view.state.doc.lines);
@@ -350,7 +350,7 @@ export const LeetCodeCodeEditor = forwardRef<
         selection: { anchor: line.from },
         effects: EditorView.scrollIntoView(line.from, { y: "center" }),
       });
-      view.focus();
+      if (options?.focus !== false) view.focus();
     },
   }), []);
 

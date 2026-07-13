@@ -6,13 +6,145 @@ type WorkerMessageLike = {
   phase?: unknown;
 };
 
-/** Return the first placeholder line only while the user has not changed the starter code. */
-export function untouchedStarterLine(code: string, starterCode: string): number | null {
-  if (code.replace(/\r\n?/g, "\n").trim() !== starterCode.replace(/\r\n?/g, "\n").trim()) {
+/**
+ * Find a starter `pass` that is still present at the original body indentation.
+ * Comments and blank lines may change without hiding the beginner prompt; a nested,
+ * intentional `pass` is ignored when its indentation differs from the starter stub.
+ */
+export function starterPlaceholderLine(code: string, starterCode: string): number | null {
+  const starterIndents = new Set(
+    starterCode
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .flatMap((line) => {
+        const match = line.match(/^(\s*)pass\s*(?:#.*)?$/);
+        return match ? [match[1].replace(/\t/g, "    ").length] : [];
+      }),
+  );
+  if (!starterIndents.size) return null;
+
+  const placeholderIndex = code
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .findIndex((line) => {
+      const match = line.match(/^(\s*)pass\s*(?:#.*)?$/);
+      return Boolean(match && starterIndents.has(match[1].replace(/\t/g, "    ").length));
+    });
+  return placeholderIndex >= 0 ? placeholderIndex + 1 : null;
+}
+
+type Mismatch =
+  | { kind: "value"; path: Array<string | number>; expected: unknown; actual: unknown }
+  | { kind: "length"; path: Array<string | number>; expected: number; actual: number }
+  | { kind: "missing"; path: Array<string | number>; side: "expected" | "actual"; value: unknown };
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function firstMismatch(
+  expected: unknown,
+  actual: unknown,
+  path: Array<string | number> = [],
+  depth = 0,
+): Mismatch | null {
+  if (Object.is(expected, actual)) return null;
+  if (depth >= 8) return { kind: "value", path, expected, actual };
+
+  if (typeof expected === "string" && typeof actual === "string") {
+    const sharedLength = Math.min(expected.length, actual.length);
+    for (let index = 0; index < sharedLength; index += 1) {
+      if (expected[index] !== actual[index]) {
+        return { kind: "value", path: [...path, index], expected: expected[index], actual: actual[index] };
+      }
+    }
+    return { kind: "length", path, expected: expected.length, actual: actual.length };
+  }
+
+  if (Array.isArray(expected) && Array.isArray(actual)) {
+    const sharedLength = Math.min(expected.length, actual.length);
+    for (let index = 0; index < sharedLength; index += 1) {
+      const mismatch = firstMismatch(expected[index], actual[index], [...path, index], depth + 1);
+      if (mismatch) return mismatch;
+    }
+    return expected.length === actual.length
+      ? null
+      : { kind: "length", path, expected: expected.length, actual: actual.length };
+  }
+
+  const expectedRecord = objectRecord(expected);
+  const actualRecord = objectRecord(actual);
+  if (expectedRecord && actualRecord) {
+    for (const key of Object.keys(expectedRecord)) {
+      if (!Object.prototype.hasOwnProperty.call(actualRecord, key)) {
+        return { kind: "missing", path: [...path, key], side: "actual", value: expectedRecord[key] };
+      }
+      const mismatch = firstMismatch(expectedRecord[key], actualRecord[key], [...path, key], depth + 1);
+      if (mismatch) return mismatch;
+    }
+    for (const key of Object.keys(actualRecord)) {
+      if (!Object.prototype.hasOwnProperty.call(expectedRecord, key)) {
+        return { kind: "missing", path: [...path, key], side: "expected", value: actualRecord[key] };
+      }
+    }
     return null;
   }
-  const placeholderIndex = code.split(/\r?\n/).findIndex((line) => /^\s*pass\s*(?:#.*)?$/.test(line));
-  return placeholderIndex >= 0 ? placeholderIndex + 1 : 1;
+
+  return { kind: "value", path, expected, actual };
+}
+
+function mismatchPath(path: Array<string | number>, language: Language): string {
+  return path.reduce<string>((label, part) => {
+    if (typeof part === "number") return `${label}[${part}]`;
+    return /^[A-Za-z_$][\w$]*$/.test(part) ? `${label}.${part}` : `${label}[${JSON.stringify(part)}]`;
+  }, language === "zh" ? "结果" : "result");
+}
+
+function compactValue(value: unknown): string {
+  if (value === undefined) return "undefined";
+  let output: string;
+  try {
+    output = JSON.stringify(value);
+  } catch {
+    output = String(value);
+  }
+  if (output === undefined) output = String(value);
+  return output.length > 90 ? `${output.slice(0, 87)}…` : output;
+}
+
+/** Explain one concrete difference instead of asking a beginner to inspect the whole result. */
+export function describeFirstMismatch(expected: unknown, actual: unknown, language: Language): string {
+  const mismatch = firstMismatch(expected, actual);
+  if (!mismatch) {
+    return language === "zh"
+      ? "显示结果相同，但判题仍未通过。先检查返回值的数据类型。"
+      : "The displayed values match, but the test still failed. Check the return value's type first.";
+  }
+
+  const path = mismatchPath(mismatch.path, language);
+  if (mismatch.kind === "length") {
+    return language === "zh"
+      ? `${path} 的长度不同：预期 ${mismatch.expected}，实际 ${mismatch.actual}。先检查循环边界或返回内容。`
+      : `${path} has a different length: expected ${mismatch.expected}, got ${mismatch.actual}. Check the loop boundary or returned items first.`;
+  }
+  if (mismatch.kind === "missing") {
+    const value = compactValue(mismatch.value);
+    if (language === "zh") {
+      return mismatch.side === "actual"
+        ? `${path} 缺少了，预期这里是 ${value}。先追踪这个位置应该在哪里写入。`
+        : `${path} 是多出来的，实际值是 ${value}。先检查哪里重复加入了内容。`;
+    }
+    return mismatch.side === "actual"
+      ? `${path} is missing; expected ${value}. Trace where this position should be written.`
+      : `${path} is extra; its value is ${value}. Check where an item was added twice.`;
+  }
+
+  const expectedValue = compactValue(mismatch.expected);
+  const actualValue = compactValue(mismatch.actual);
+  return language === "zh"
+    ? `第一个不同位置是 ${path}：预期 ${expectedValue}，实际 ${actualValue}。先追踪这个位置的值在哪里写入。`
+    : `The first difference is at ${path}: expected ${expectedValue}, got ${actualValue}. Trace where that value is written first.`;
 }
 
 /** Runtime loading messages are global; every other message must match this exact run. */

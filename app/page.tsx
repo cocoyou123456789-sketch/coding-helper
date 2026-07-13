@@ -45,7 +45,7 @@ import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
-import { beginnerPythonErrorHint, messageBelongsToRun, solutionErrorLine, untouchedStarterLine } from "./run-session";
+import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, solutionErrorLine, starterPlaceholderLine } from "./run-session";
 import {
   createStudyBackup,
   MAX_STUDY_BACKUP_BYTES,
@@ -105,8 +105,8 @@ type WorkerTestResult = {
 type RunState =
   | { phase: "idle"; message: string; results: WorkerTestResult[] }
   | { phase: "running"; message: string; results: WorkerTestResult[] }
-  | { phase: "done"; message: string; results: WorkerTestResult[]; duration: number; stdout: string }
-  | { phase: "error"; message: string; results: WorkerTestResult[]; stdout?: string };
+  | { phase: "done"; message: string; results: WorkerTestResult[]; duration: number; stdout: string; errorLine?: number }
+  | { phase: "error"; message: string; results: WorkerTestResult[]; stdout?: string; errorLine?: number };
 
 type BackupOperation = "idle" | "exporting" | "checking" | "restoring";
 
@@ -225,6 +225,9 @@ const pageCopy = {
     exampleExplanation: "说明",
     beginnerHint: "小白提示",
     targetComplexity: "目标复杂度：",
+    coreIdea: "核心思路",
+    showCoreIdea: "我卡住了，看核心思路",
+    hideCoreIdea: "先收起核心思路",
     shortcut: "Enter 自动缩进 · Tab 调整缩进 · ⌘ / Ctrl + Enter 运行",
     resetCode: "恢复初始代码",
     run: "运行测试",
@@ -269,6 +272,15 @@ const pageCopy = {
     resetMessage: "代码已恢复，还没有运行测试",
     resetConfirm: "确定恢复初始代码吗？逐行解释会清空，解题思路和复盘会保留。",
     starterPrompt: (line: number) => `先把第 ${line} 行的 pass 换成你的解法，再运行测试。`,
+    starterCoachTitle: "这行还是占位符",
+    starterCoachBody: "pass 不会返回答案。可以先看一步思路，也可以继续运行，亲眼看看它会得到什么结果。",
+    editStarterLine: (line: number) => `去第 ${line} 行写代码`,
+    runAnyway: "仍然运行",
+    wrongAnswerTitle: "代码能运行，先只修第一个不同",
+    wrongAnswerBody: "用这个输入手算一遍，再追踪差异位置的值在哪里写入，不用同时检查整份代码。",
+    saveFailedReview: "保存到错题笔记",
+    backToErrorLine: (line: number) => `回到第 ${line} 行`,
+    failedTestNote: (index: number, input: string, expected: string, actual: string, detail: string) => `【测试 ${index} 未通过】\n输入：${input}\n预期：${expected}\n实际：${actual}\n先修：${detail}`,
     loadingPython: "正在加载 Python 环境…首次运行会稍慢",
     runningCode: "正在运行…",
     timeout: "运行超过 20 秒，已自动停止。请检查是否写了不会结束的循环。",
@@ -409,6 +421,9 @@ const pageCopy = {
     exampleExplanation: "Explanation",
     beginnerHint: "Beginner hint",
     targetComplexity: "Target: ",
+    coreIdea: "Core idea",
+    showCoreIdea: "I'm stuck — show the core idea",
+    hideCoreIdea: "Hide the core idea",
     shortcut: "Enter auto-indents · Tab adjusts indent · ⌘ / Ctrl + Enter to run",
     resetCode: "Reset starter code",
     run: "Run tests",
@@ -453,6 +468,15 @@ const pageCopy = {
     resetMessage: "Starter code restored; no tests run yet",
     resetConfirm: "Restore the starter code? Line explanations will be cleared; your approach and review will stay.",
     starterPrompt: (line: number) => `Replace pass on line ${line} with your solution before running tests.`,
+    starterCoachTitle: "This line is still a placeholder",
+    starterCoachBody: "pass returns no answer. Reveal one step of the idea, or run it anyway to see exactly what the placeholder produces.",
+    editStarterLine: (line: number) => `Edit line ${line}`,
+    runAnyway: "Run anyway",
+    wrongAnswerTitle: "The code runs — fix only the first difference",
+    wrongAnswerBody: "Work through this input once, then trace where the differing value is written. You do not need to inspect the whole solution at once.",
+    saveFailedReview: "Save to mistake notes",
+    backToErrorLine: (line: number) => `Go to line ${line}`,
+    failedTestNote: (index: number, input: string, expected: string, actual: string, detail: string) => `【Test ${index} failed】\nInput: ${input}\nExpected: ${expected}\nActual: ${actual}\nFix first: ${detail}`,
     loadingPython: "Loading Python… the first run may take a moment",
     runningCode: "Running…",
     timeout: "Stopped after 20 seconds. Check for a loop that never ends.",
@@ -671,6 +695,8 @@ export default function Home() {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showGuide, setShowGuide] = useState(false);
   const [showStatement, setShowStatement] = useState(true);
+  const [coreIdeaLocation, setCoreIdeaLocation] = useState<"problem" | "starter" | "wrong" | null>(null);
+  const [starterPromptLine, setStarterPromptLine] = useState<number | null>(null);
   const [showProblemList, setShowProblemList] = useState(false);
   const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
@@ -691,6 +717,8 @@ export default function Home() {
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runSequenceRef = useRef(0);
+  const runFeedbackFrameRef = useRef<number | null>(null);
+  const runFeedbackGenerationRef = useRef(0);
   const saveSequenceRef = useRef(0);
   const dataOperationRef = useRef(false);
   const dataStaleRef = useRef(false);
@@ -702,6 +730,8 @@ export default function Home() {
   const queuedLanguageValueRef = useRef<string | null>(null);
   const activeRunRef = useRef<{ id: string; cleanup: () => void } | null>(null);
   const codeEditorRef = useRef<LeetCodeCodeEditorHandle | null>(null);
+  const problemHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const testConsoleRef = useRef<HTMLElement | null>(null);
   const problemMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const notesButtonRef = useRef<HTMLButtonElement | null>(null);
   const libraryDrawerRef = useRef<HTMLElement | null>(null);
@@ -749,9 +779,19 @@ export default function Home() {
   const allQuickTestsPassed = runState.phase === "done"
     && runState.results.length > 0
     && runState.results.every((result) => result.passed);
+  const firstFailedResult = runState.results.find((result) => !result.passed);
   const runErrorForCoaching = runState.phase === "error"
     ? runState.message
-    : runState.results.find((result) => result.error)?.error?.message;
+    : firstFailedResult?.error?.message;
+  const runErrorLine = runState.phase === "done" || runState.phase === "error"
+    ? runState.errorLine
+    : undefined;
+  const firstWrongAnswer = runState.phase === "done" && firstFailedResult && !firstFailedResult.error
+    ? firstFailedResult
+    : undefined;
+  const firstWrongAnswerHint = firstWrongAnswer
+    ? describeFirstMismatch(firstWrongAnswer.expected, firstWrongAnswer.actual, language)
+    : "";
   const fontScale = Math.round((fontSize / MIN_FONT_SIZE) * 100);
 
   const topics = useMemo(
@@ -915,6 +955,9 @@ export default function Home() {
       workerRef.current?.terminate();
       workerRef.current = null;
       runtimeReadyRef.current = false;
+      runFeedbackGenerationRef.current += 1;
+      if (runFeedbackFrameRef.current !== null) window.cancelAnimationFrame(runFeedbackFrameRef.current);
+      runFeedbackFrameRef.current = null;
 
       setAppMode(navigation.mode);
       if (navigation.problemId) setSelectedId(navigation.problemId);
@@ -927,6 +970,8 @@ export default function Home() {
       setNoteLineMode("current");
       setActiveCodeLine(1);
       setShowStatement(true);
+      setStarterPromptLine(null);
+      setCoreIdeaLocation(null);
       setShowProblemList(false);
       setShowNotesDrawer(false);
       setMobileWorkspaceTab(navigation.mode === "workspace" && navigation.problemId ? "code" : "library");
@@ -1004,6 +1049,7 @@ export default function Home() {
       activeRunRef.current = null;
       workerRef.current?.terminate();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (runFeedbackFrameRef.current !== null) window.cancelAnimationFrame(runFeedbackFrameRef.current);
     };
   }, []);
 
@@ -1107,6 +1153,9 @@ export default function Home() {
   }
 
   function cancelActiveRun() {
+    runFeedbackGenerationRef.current += 1;
+    if (runFeedbackFrameRef.current !== null) window.cancelAnimationFrame(runFeedbackFrameRef.current);
+    runFeedbackFrameRef.current = null;
     const activeRun = activeRunRef.current;
     if (!activeRun) return;
     activeRun.cleanup();
@@ -1122,6 +1171,11 @@ export default function Home() {
     setShowProblemList(false);
     setShowNotesDrawer(false);
     setMobileWorkspaceTab(pane);
+    if (pane === "code") {
+      window.requestAnimationFrame(() => {
+        codeEditorRef.current?.revealLine(safeActiveCodeLine, { focus: false });
+      });
+    }
   }
 
   function openProblemListDrawer() {
@@ -1163,6 +1217,18 @@ export default function Home() {
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
+  function focusPracticeStart() {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if (window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) {
+        problemHeadingRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+        problemHeadingRef.current?.focus({ preventScroll: true });
+        return;
+      }
+      if (codeEditorRef.current) codeEditorRef.current.focus();
+      else problemHeadingRef.current?.focus({ preventScroll: true });
+    }));
+  }
+
   function chooseProblem(id: number, updateHistory = true) {
     if (!KNOWN_PROBLEM_IDS.has(id)) return;
     void playSelectionHaptic();
@@ -1170,13 +1236,15 @@ export default function Home() {
     setSelectedId(id);
     if (updateHistory) writeNavigationState({ mode: "workspace", problemId: id }, "push");
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
+    setStarterPromptLine(null);
+    setCoreIdeaLocation(null);
     setNoteTab("line");
     setNoteLineMode("current");
     setActiveCodeLine(1);
     setShowStatement(true);
     closeProblemListDrawer(false);
     setMobileWorkspaceTab("code");
-    window.requestAnimationFrame(() => codeEditorRef.current?.focus());
+    focusPracticeStart();
   }
 
   function showAppMode(nextMode: AppMode) {
@@ -1200,6 +1268,8 @@ export default function Home() {
     cancelActiveRun();
     setLanguage(nextLanguage);
     setTopic("all");
+    setStarterPromptLine(null);
+    setCoreIdeaLocation(null);
     setRunState({ phase: "idle", message: pageCopy[nextLanguage].notRun, results: [] });
   }
 
@@ -1517,7 +1587,55 @@ export default function Home() {
   function selectCodeLine(lineNumber: number) {
     const nextLine = Math.min(Math.max(1, lineNumber), codeLines.length);
     setActiveCodeLine(nextLine);
+    window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(nextLine, { focus: false }));
+  }
+
+  function focusCodeLine(lineNumber: number) {
+    const nextLine = Math.min(Math.max(1, lineNumber), codeLines.length);
+    setActiveCodeLine(nextLine);
     window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(nextLine));
+  }
+
+  function scrollRunFeedbackIntoView() {
+    if (!window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) return;
+    const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    const generation = runFeedbackGenerationRef.current;
+    if (runFeedbackFrameRef.current !== null) window.cancelAnimationFrame(runFeedbackFrameRef.current);
+    runFeedbackFrameRef.current = window.requestAnimationFrame(() => {
+      runFeedbackFrameRef.current = null;
+      if (generation !== runFeedbackGenerationRef.current) return;
+      testConsoleRef.current?.scrollIntoView({ block: "start", behavior });
+    });
+  }
+
+  function revealRunOutcome(lineNumber?: number) {
+    const compact = window.matchMedia(COMPACT_WORKSPACE_QUERY).matches;
+    const generation = runFeedbackGenerationRef.current;
+    if (lineNumber) {
+      const safeLine = Math.min(Math.max(1, lineNumber), codeLines.length);
+      setActiveCodeLine(safeLine);
+      window.requestAnimationFrame(() => {
+        if (generation !== runFeedbackGenerationRef.current) return;
+        codeEditorRef.current?.revealLine(safeLine, { focus: !compact });
+      });
+    }
+    if (compact) scrollRunFeedbackIntoView();
+  }
+
+  function saveFailedTestToReview(result: WorkerTestResult) {
+    const sourceTest = currentProblem.tests[result.index];
+    const input = language === "en"
+      ? result.expression
+      : (sourceTest?.inputLabel ?? result.expression);
+    const detail = describeFirstMismatch(result.expected, result.actual, language);
+    const note = copy.failedTestNote(result.index + 1, input, pretty(result.expected), pretty(result.actual), detail);
+    const existing = currentRecord.mistakes.trim();
+    updateRecord({
+      mistakes: existing.includes(note) ? existing : [existing, note].filter(Boolean).join("\n\n"),
+      status: currentRecord.status === "solved" ? "solved" : "learning",
+    });
+    setNoteTab("review");
+    openNotesDrawer();
   }
 
   function fillLineNotes() {
@@ -1530,6 +1648,8 @@ export default function Home() {
     if (!window.confirm(copy.resetConfirm)) return;
     cancelActiveRun();
     updateRecord({ code: currentProblem.starterCode, lineNotes: [], status: "todo" });
+    setStarterPromptLine(null);
+    setCoreIdeaLocation(null);
     setNoteLineMode("current");
     selectCodeLine(1);
     setRunState({ phase: "idle", message: copy.resetMessage, results: [] });
@@ -1542,6 +1662,8 @@ export default function Home() {
 
   function updateEditorCode(nextCode: string, lineNoteEdit?: LineNoteEdit) {
     cancelActiveRun();
+    setStarterPromptLine(null);
+    setCoreIdeaLocation((current) => current === "problem" ? current : null);
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setRecords((previous) => {
       const previousRecord = normalizeStudyRecord(currentProblem, previous[currentProblem.id]);
@@ -1561,13 +1683,15 @@ export default function Home() {
     else codeEditorRef.current?.indent();
   }
 
-  function runTests() {
+  function runTests(options?: { allowPlaceholder?: boolean }) {
     if (runState.phase === "running" || activeRunRef.current) return;
 
-    const placeholderLine = untouchedStarterLine(currentRecord.code, currentProblem.starterCode);
-    if (placeholderLine !== null) {
+    const placeholderLine = starterPlaceholderLine(currentRecord.code, currentProblem.starterCode);
+    if (placeholderLine !== null && options?.allowPlaceholder !== true) {
+      setStarterPromptLine(placeholderLine);
+      setCoreIdeaLocation((current) => current === "problem" || current === "starter" ? "starter" : null);
       setRunState({ phase: "idle", message: copy.starterPrompt(placeholderLine), results: [] });
-      selectCodeLine(placeholderLine);
+      revealRunOutcome(placeholderLine);
       return;
     }
 
@@ -1577,6 +1701,8 @@ export default function Home() {
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const worker = workerRef.current ?? new Worker(`${basePath}/python-worker.js`);
     workerRef.current = worker;
+    setStarterPromptLine(null);
+    setCoreIdeaLocation((current) => current === "problem" ? current : null);
     setRunState({ phase: "running", message: copy.loadingPython, results: [] });
     updateRecord({ status: currentRecord.status === "solved" ? "solved" : "learning" });
 
@@ -1606,6 +1732,7 @@ export default function Home() {
           message: copy.timeout,
           results: [],
         });
+        scrollRunFeedbackIntoView();
       }, duration);
     };
     armTimeout(runtimeReadyRef.current ? 20_000 : 90_000);
@@ -1631,9 +1758,8 @@ export default function Home() {
       if (data.type === "result") {
         const results = (data.results ?? []) as WorkerTestResult[];
         const allPassed = results.length > 0 && results.every((result) => result.passed);
-        const firstError = results.find((result) => result.error)?.error;
+        const firstError = results.find((result) => !result.passed)?.error;
         const errorLine = solutionErrorLine(`${firstError?.message ?? ""}\n${firstError?.traceback ?? ""}`);
-        if (errorLine) window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(errorLine));
         void playTestHaptic(allPassed);
         setRunState({
           phase: "done",
@@ -1641,19 +1767,22 @@ export default function Home() {
           results,
           duration: data.duration ?? 0,
           stdout: data.stdout ?? "",
+          errorLine: errorLine ?? undefined,
         });
+        revealRunOutcome(errorLine ?? undefined);
         return;
       }
 
       const errorMessage = data.error?.message ?? copy.runFailed;
       const errorLine = solutionErrorLine(`${errorMessage}\n${data.error?.traceback ?? ""}`);
-      if (errorLine) window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(errorLine));
       setRunState({
         phase: "error",
         message: errorMessage,
         results: [],
         stdout: data.stdout ?? "",
+        errorLine: errorLine ?? undefined,
       });
+      revealRunOutcome(errorLine ?? undefined);
     }
 
     function handleWorkerError(event: ErrorEvent) {
@@ -1666,6 +1795,7 @@ export default function Home() {
         message: event.message || copy.workerFailed,
         results: [],
       });
+      scrollRunFeedbackIntoView();
     }
 
     worker.addEventListener("message", handleWorkerMessage);
@@ -1973,7 +2103,7 @@ export default function Home() {
               )}
             </div>
             <div className="brief-title-row">
-              <h2>{currentProblem.id}. {currentProblem.title}</h2>
+              <h2 ref={problemHeadingRef} tabIndex={-1}>{currentProblem.id}. {currentProblem.title}</h2>
               <span className={`brief-difficulty difficulty-${difficultyClasses[currentProblem.difficulty]}`}>
                 {copy.difficultyLabels[currentProblem.difficulty]}
               </span>
@@ -2028,10 +2158,27 @@ export default function Home() {
                 <p className="problem-summary">{currentProblem.summary}</p>
               )}
             </section>
-            <div className="hint-row">
-              <span>{copy.beginnerHint}</span>
-              <p>{currentProblem.hint}</p>
-              <b>{copy.targetComplexity}{currentProblem.complexity}</b>
+            <div className={ideStyles.hintCoach}>
+              <div className="hint-row">
+                <span>{copy.beginnerHint}</span>
+                <p>{currentProblem.hint}</p>
+                <b>{copy.targetComplexity}{currentProblem.complexity}</b>
+              </div>
+              <button
+                type="button"
+                className={ideStyles.methodToggle}
+                aria-expanded={coreIdeaLocation === "problem"}
+                aria-controls={`problem-core-idea-${currentProblem.id}`}
+                onClick={() => setCoreIdeaLocation((current) => current === "problem" ? null : "problem")}
+              >
+                {coreIdeaLocation === "problem" ? copy.hideCoreIdea : copy.showCoreIdea}
+              </button>
+              {coreIdeaLocation === "problem" && (
+                <div id={`problem-core-idea-${currentProblem.id}`} className={ideStyles.methodDisclosure}>
+                  <strong>{copy.coreIdea}</strong>
+                  <p>{currentProblem.method}</p>
+                </div>
+              )}
             </div>
             </div>
           </article>
@@ -2052,7 +2199,7 @@ export default function Home() {
             </div>
             <div className="editor-actions">
               <button className="dark-button" type="button" onClick={resetCode}>{copy.resetCode}</button>
-              <button className="run-button" type="button" onClick={runTests} disabled={runState.phase === "running"}>
+              <button className="run-button" type="button" onClick={() => runTests()} disabled={runState.phase === "running"}>
                 <span aria-hidden="true">▶</span>{runState.phase === "running" ? copy.running : copy.run}
               </button>
               {!nativeApp && (
@@ -2070,7 +2217,7 @@ export default function Home() {
                 ref={codeEditorRef}
                 value={currentRecord.code}
                 onChange={updateEditorCode}
-                onRun={runTests}
+                onRun={() => runTests()}
                 fontSize={fontSize}
                 language={language}
                 ariaLabel={copy.editorLabel}
@@ -2079,7 +2226,7 @@ export default function Home() {
             </Suspense>
           </div>
 
-          <section className={`test-console test-${runState.phase} ${ideStyles.testConsole}`} aria-live="polite">
+          <section ref={testConsoleRef} className={`test-console test-${runState.phase} ${ideStyles.testConsole}`} aria-live="polite">
             <div className="console-head">
               <div>
                 <strong>{copy.quickTest}</strong>
@@ -2092,10 +2239,41 @@ export default function Home() {
               </div>
             </div>
 
+            {starterPromptLine !== null && (
+              <div className={`${ideStyles.errorCoach} ${ideStyles.starterCoach}`} role="note">
+                <strong>{copy.starterCoachTitle}</strong>
+                <span>{copy.starterCoachBody}</span>
+                {coreIdeaLocation === "starter" && <p id={`starter-core-idea-${currentProblem.id}`} className={ideStyles.coachMethod}><b>{copy.coreIdea}{language === "zh" ? "：" : ": "}</b>{currentProblem.method}</p>}
+                <div className={ideStyles.coachActions}>
+                  <button type="button" onClick={() => focusCodeLine(starterPromptLine)}>{copy.editStarterLine(starterPromptLine)}</button>
+                  <button type="button" aria-expanded={coreIdeaLocation === "starter"} aria-controls={`starter-core-idea-${currentProblem.id}`} onClick={() => setCoreIdeaLocation((current) => current === "starter" ? null : "starter")}>{coreIdeaLocation === "starter" ? copy.hideCoreIdea : copy.showCoreIdea}</button>
+                  <button type="button" onClick={() => runTests({ allowPlaceholder: true })}>{copy.runAnyway}</button>
+                </div>
+              </div>
+            )}
+
             {runErrorForCoaching && (
               <div className={ideStyles.errorCoach} role="note">
                 <strong>{language === "zh" ? "先修第一处错误" : "Fix the first error first"}</strong>
                 <span>{beginnerPythonErrorHint(runErrorForCoaching, language)}</span>
+                {runErrorLine && (
+                  <div className={ideStyles.coachActions}>
+                    <button type="button" onClick={() => focusCodeLine(runErrorLine)}>{copy.backToErrorLine(runErrorLine)}</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {firstWrongAnswer && (
+              <div className={`${ideStyles.errorCoach} ${ideStyles.wrongAnswerCoach}`} role="note">
+                <strong>{copy.wrongAnswerTitle}</strong>
+                <span>{firstWrongAnswerHint}</span>
+                <small>{copy.wrongAnswerBody}</small>
+                {coreIdeaLocation === "wrong" && <p id={`wrong-core-idea-${currentProblem.id}`} className={ideStyles.coachMethod}><b>{copy.coreIdea}{language === "zh" ? "：" : ": "}</b>{currentProblem.method}</p>}
+                <div className={ideStyles.coachActions}>
+                  <button type="button" aria-expanded={coreIdeaLocation === "wrong"} aria-controls={`wrong-core-idea-${currentProblem.id}`} onClick={() => setCoreIdeaLocation((current) => current === "wrong" ? null : "wrong")}>{coreIdeaLocation === "wrong" ? copy.hideCoreIdea : copy.showCoreIdea}</button>
+                  <button type="button" onClick={() => saveFailedTestToReview(firstWrongAnswer)}>{copy.saveFailedReview}</button>
+                </div>
               </div>
             )}
 
@@ -2167,7 +2345,7 @@ export default function Home() {
               <strong>{currentProblem.id}. {currentProblem.title}</strong>
               <span>{copy.difficultyLabels[currentProblem.difficulty]} · {currentProblem.topic}</span>
             </div>
-            <button type="button" onClick={() => { closeNotesDrawer(); setMobileWorkspaceTab("code"); }}>{copy.viewProblemAndCode}</button>
+            <button type="button" onClick={() => selectMobileWorkspacePane("code")}>{copy.viewProblemAndCode}</button>
           </div>
 
           {noteTab === "line" ? (
