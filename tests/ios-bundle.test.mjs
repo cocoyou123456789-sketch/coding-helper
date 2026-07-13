@@ -11,7 +11,7 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
     readFile(file("ios/App/App/public/index.html"), "utf8"),
     readFile(file("capacitor.config.ts"), "utf8"),
     readFile(file("ios/App/App/capacitor.config.json"), "utf8"),
-    readFile(file("ios/App/App/public/python-worker.js"), "utf8"),
+    readFile(file("ios/App/App/public/python-worker-signature-v1.js"), "utf8"),
     readFile(file("ios/App/App/PrivacyInfo.xcprivacy"), "utf8"),
     readFile(file("ios/App/CapApp-SPM/Package.swift"), "utf8"),
     readFile(file("ios/App/App/Info.plist"), "utf8"),

@@ -51,7 +51,7 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
     readFile(new URL("../app/problem-i18n-a.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-i18n-b.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-i18n-c.ts", import.meta.url), "utf8"),
-    readFile(new URL("../public/python-worker.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/python-worker-signature-v1.js", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8"),
@@ -64,6 +64,8 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(englishA, /title: "Two Sum"/);
   assert.match(problemSource, /id: 32, title: "最长有效括号"/);
   assert.match(problemSource, /id: 167, title: "两数之和 II - 输入有序数组"/);
+  assert.match(problemSource, /export interface ProblemSignature/);
+  assert.match(problemSource, /kind: "solution" \| "design"/);
   assert.match(detailC, /^  167: \{/m);
   assert.match(englishC, /^  167: \{/m);
   assert.match(pageSource, /运行测试/);
@@ -84,6 +86,8 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(pageSource, /当前代码（包括注释）和逐行解释会被替换/);
   assert.match(pageSource, /你的代码还没有执行，也没有丢失/);
   assert.match(pageSource, /代码运行太久，先检查循环/);
+  assert.match(pageSource, /先恢复原题要求的代码入口/);
+  assert.match(pageSource, /python-worker-signature-v1\.js/);
   assert.match(pageSource, /workerFailed: "Python 环境暂时无法启动，请重新运行。"/);
   assert.match(pageSource, /保存失败，请先复制重要笔记/);
   assert.match(pageSource, /saveErrorBanner/);
@@ -105,6 +109,12 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(pwaSource, /安装 App/);
   assert.match(workerSource, /Pyodide/);
   assert.match(workerSource, /build_list = make_list/);
+  assert.match(workerSource, /__signature_contract/);
+  assert.match(workerSource, /inspect\.signature/);
+  assert.match(workerSource, /missing_class/);
+  assert.match(workerSource, /missing_method/);
+  assert.match(workerSource, /incompatible_parameters/);
+  assert.match(workerSource, /globals\(\)\[__method_name\] = getattr/);
   assert.match(serviceWorkerSource, /self\.registration\.scope/);
   assert.match(serviceWorkerSource, /cacheAppAssetGraph/);
   assert.match(serviceWorkerSource, /appAssetDependencies/);
@@ -114,7 +124,7 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.equal(manifest.background_color, "#fff7f9");
   assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
-  assert.match(serviceWorkerSource, /2026-07-13-lazy-v2/);
+  assert.match(serviceWorkerSource, /2026-07-14-signature-v1/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));

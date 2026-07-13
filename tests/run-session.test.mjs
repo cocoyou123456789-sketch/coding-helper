@@ -6,12 +6,121 @@ import {
   beginnerPythonErrorHint,
   describeFirstMismatch,
   messageBelongsToRun,
+  normalizeSignatureIssue,
   pythonErrorSummary,
   pythonSourceIsEmpty,
   solutionErrorLine,
   starterPlaceholderLine,
   starterRecoveryNeedsConfirmation,
 } from "../app/run-session.ts";
+
+test("every practice problem carries the exact LeetCode entry contract", () => {
+  assert.equal(problems.length, 101);
+  const solutionProblems = problems.filter((problem) => problem.signature.kind === "solution");
+  const designProblems = problems.filter((problem) => problem.signature.kind === "design");
+  assert.equal(solutionProblems.length, 97);
+  assert.deepEqual(designProblems.map((problem) => problem.id), [146, 208, 155, 295]);
+
+  for (const problem of solutionProblems) {
+    assert.equal(problem.signature.className, "Solution", problem.title);
+    assert.deepEqual(problem.signature.constructorParams, [], problem.title);
+    assert.equal(problem.signature.methods.length, 1, problem.title);
+    assert.match(problem.starterCode, /^class Solution:/, problem.title);
+    const method = problem.signature.methods[0];
+    assert.match(
+      problem.starterCode,
+      new RegExp(`^ {4}def ${method.name}\\(self, ${method.params.join(", ")}\\):`, "m"),
+      problem.title,
+    );
+  }
+
+  for (const problem of designProblems) {
+    assert.match(problem.starterCode, new RegExp(`^class ${problem.signature.className}:`), problem.title);
+    const constructorParams = ["self", ...problem.signature.constructorParams].join(", ");
+    assert.match(problem.starterCode, new RegExp(`^ {4}def __init__\\(${constructorParams}\\):`, "m"), problem.title);
+    for (const method of problem.signature.methods) {
+      const params = ["self", ...method.params].join(", ");
+      assert.match(problem.starterCode, new RegExp(`^ {4}def ${method.name}\\(${params}\\):`, "m"), problem.title);
+    }
+  }
+});
+
+test("structured signature failures point beginners to the required declaration", () => {
+  const twoSum = problems.find((problem) => problem.id === 1);
+  const lru = problems.find((problem) => problem.id === 146);
+  assert.ok(twoSum);
+  assert.ok(lru);
+
+  assert.deepEqual(
+    normalizeSignatureIssue(
+      { code: "missing_class", symbol: "Solution" },
+      twoSum.signature,
+      "class Answer:\n    def twoSum(self, nums, target):\n        return []",
+    ),
+    {
+      code: "missing_class",
+      kind: "class",
+      symbol: "Solution",
+      declaration: "class Solution:",
+    },
+  );
+
+  const renamedMethod = normalizeSignatureIssue(
+    { code: "missing_method", symbol: "twoSum" },
+    twoSum.signature,
+    "class Solution:\n    def two_sum(self, nums, target):\n        return []",
+  );
+  assert.equal(renamedMethod?.declaration, "class Solution:\n    def twoSum(self, nums, target):");
+  assert.equal(renamedMethod?.focusLine, 1);
+  assert.equal(renamedMethod?.focusKind, "class");
+
+  const wrongArity = normalizeSignatureIssue(
+    { code: "incompatible_parameters", symbol: "twoSum" },
+    twoSum.signature,
+    "class Helper:\n    def twoSum(self, nums, target):\n        return []\nclass Solution:\n    def twoSum(self, nums):\n        return []",
+  );
+  assert.equal(wrongArity?.kind, "method");
+  assert.equal(wrongArity?.focusLine, 5);
+  assert.equal(wrongArity?.focusKind, "declaration");
+
+  const wrongConstructor = normalizeSignatureIssue(
+    { code: "incompatible_parameters", symbol: "__init__" },
+    lru.signature,
+    "class LRUCache:\n    def __init__(self):\n        pass",
+  );
+  assert.equal(wrongConstructor?.declaration, "class LRUCache:\n    def __init__(self, capacity):");
+  assert.equal(wrongConstructor?.focusLine, 2);
+
+  const missingDesignMethod = normalizeSignatureIssue(
+    { code: "missing_method", symbol: "get" },
+    lru.signature,
+    "# plan\n# keep\nclass LRUCache:\n    def fetch(self, key):\n        return -1",
+  );
+  assert.equal(missingDesignMethod?.declaration, "class LRUCache:\n    def get(self, key):");
+  assert.equal(missingDesignMethod?.focusLine, 3);
+  assert.equal(missingDesignMethod?.focusKind, "class");
+
+  const noReliableClassCandidate = normalizeSignatureIssue(
+    { code: "missing_class", symbol: "Solution" },
+    twoSum.signature,
+    "class Helper:\n    pass\nclass Soluton:\n    pass",
+  );
+  assert.equal(noReliableClassCandidate?.focusLine, undefined);
+  assert.equal(noReliableClassCandidate?.focusKind, undefined);
+});
+
+test("malformed signature failures never become trusted repair advice", () => {
+  const twoSum = problems.find((problem) => problem.id === 1);
+  assert.ok(twoSum);
+  const normalize = (value) => normalizeSignatureIssue(value, twoSum.signature, twoSum.starterCode);
+  assert.equal(normalize(null), null);
+  assert.equal(normalize({ code: "unknown", symbol: "Solution" }), null);
+  assert.equal(normalize({ code: "missing_class", symbol: "twoSum" }), null);
+  assert.equal(normalize({ code: "missing_method", symbol: "Solution" }), null);
+  assert.equal(normalize({ code: "missing_method", symbol: "__init__" }), null);
+  assert.equal(normalize({ code: "incompatible_parameters", symbol: "Solution" }), null);
+  assert.equal(normalize({ code: "missing_method", symbol: "notRequired" }), null);
+});
 
 test("blank or comment-only Python is stopped before the worker runs", () => {
   assert.equal(pythonSourceIsEmpty(""), true);

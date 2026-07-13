@@ -16,7 +16,7 @@ const runtimeFiles = [
 await mkdir(destination, { recursive: true });
 await Promise.all(runtimeFiles.map((file) => copyFile(join(source, file), join(destination, file))));
 
-const workerPath = join(root, "dist", "client", "python-worker.js");
+const workerPath = join(root, "dist", "client", "python-worker-signature-v1.js");
 const webRuntimeBlock = `const IS_NATIVE_APP = self.location.protocol === "capacitor:";
 const PYODIDE_INDEX_URL = IS_NATIVE_APP
   ? new URL("./pyodide/", self.location.href).href

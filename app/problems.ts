@@ -6,6 +6,18 @@ export interface ProblemTest {
   inputLabel: string;
 }
 
+export interface ProblemSignatureMethod {
+  name: string;
+  params: string[];
+}
+
+export interface ProblemSignature {
+  kind: "solution" | "design";
+  className: string;
+  constructorParams: string[];
+  methods: ProblemSignatureMethod[];
+}
+
 export interface Problem {
   id: number;
   title: string;
@@ -19,22 +31,34 @@ export interface Problem {
   hint: string;
   complexity: string;
   starterCode: string;
+  signature: ProblemSignature;
   tests: ProblemTest[];
 }
 
-type Seed = Omit<Problem, "starterCode"> & {
+type Seed = Omit<Problem, "signature" | "starterCode"> & {
   functionName?: string;
+  signature?: ProblemSignature;
   starterCode?: string;
 };
 
 const starter = (functionName: string, params: string[]) =>
   `class Solution:\n    def ${functionName}(self, ${params.join(", ")}):\n        # 写下你的解法\n        pass`;
 
-const q = (seed: Seed): Problem => ({
-  ...seed,
-  starterCode:
-    seed.starterCode ?? starter(seed.functionName ?? seed.slug.replace(/-/g, "_"), seed.params),
-});
+const q = (seed: Seed): Problem => {
+  const { functionName: suppliedFunctionName, signature: suppliedSignature, ...problem } = seed;
+  const functionName = suppliedFunctionName ?? seed.slug.replace(/-/g, "_");
+  const signature = suppliedSignature ?? {
+    kind: "solution",
+    className: "Solution",
+    constructorParams: [],
+    methods: [{ name: functionName, params: seed.params }],
+  };
+  return {
+    ...problem,
+    signature,
+    starterCode: seed.starterCode ?? starter(functionName, seed.params),
+  };
+};
 
 const t = (inputLabel: string, expression: string, expected: unknown): ProblemTest => ({
   inputLabel,
@@ -227,6 +251,10 @@ export const problems: Problem[] = [
     summary: "实现固定容量缓存，读取和写入都要在 O(1) 内完成，并淘汰最久未使用项。", example: "容量 2，连续 put/get 后按最近使用顺序淘汰",
     method: "哈希表负责定位，双向链表维护最近使用顺序。", params: ["capacity"],
     hint: "访问节点后要把它移到链表的最近使用端。", complexity: "get/put 平均 O(1)，空间 O(capacity)",
+    signature: {
+      kind: "design", className: "LRUCache", constructorParams: ["capacity"],
+      methods: [{ name: "get", params: ["key"] }, { name: "put", params: ["key", "value"] }],
+    },
     starterCode: `class LRUCache:
     def __init__(self, capacity):
         self.capacity = capacity
@@ -332,6 +360,14 @@ export const problems: Problem[] = [
     summary: "实现单词插入、完整单词查询和前缀查询。", example: "插入 apple 后，search(apple)=true，startsWith(app)=true",
     method: "每个节点保存字符到子节点的映射，并用结束标记区分完整单词。", params: [],
     hint: "走完字符不代表单词存在，还要检查结束标记。", complexity: "每次操作 O(L)，空间 O(总字符数)",
+    signature: {
+      kind: "design", className: "Trie", constructorParams: [],
+      methods: [
+        { name: "insert", params: ["word"] },
+        { name: "search", params: ["word"] },
+        { name: "startsWith", params: ["prefix"] },
+      ],
+    },
     starterCode: `class Trie:
     def __init__(self):
         self.children = {}
@@ -425,6 +461,15 @@ export const problems: Problem[] = [
     summary: "实现支持 push、pop、top 和常数时间 getMin 的栈。", example: "压入 -2,0,-3 后 getMin()=-3",
     method: "另设最小值栈，或在每个元素旁保存入栈时的最小值。", params: [],
     hint: "弹出元素时，对应的历史最小值也要一起弹出。", complexity: "每次操作 O(1)，空间 O(n)",
+    signature: {
+      kind: "design", className: "MinStack", constructorParams: [],
+      methods: [
+        { name: "push", params: ["val"] },
+        { name: "pop", params: [] },
+        { name: "top", params: [] },
+        { name: "getMin", params: [] },
+      ],
+    },
     starterCode: `class MinStack:
     def __init__(self):
         self.stack = []
@@ -470,6 +515,10 @@ export const problems: Problem[] = [
     summary: "持续接收整数，并能随时返回当前所有数字的中位数。", example: "加入 1、2 后中位数 1.5，再加入 3 后为 2",
     method: "最大堆保存较小一半，最小堆保存较大一半，并始终保持大小平衡。", params: [],
     hint: "Python 可用负数模拟最大堆。", complexity: "addNum O(log n)，findMedian O(1)，空间 O(n)",
+    signature: {
+      kind: "design", className: "MedianFinder", constructorParams: [],
+      methods: [{ name: "addNum", params: ["num"] }, { name: "findMedian", params: [] }],
+    },
     starterCode: `class MedianFinder:
     def __init__(self):
         self.small = []  # 最大堆（存负数）

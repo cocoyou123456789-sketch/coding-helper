@@ -448,6 +448,39 @@
   color: #f5d58e;
 }
 
+.signatureCoach {
+  background: rgba(97, 76, 145, 0.22);
+  border-color: rgba(178, 147, 231, 0.42);
+}
+
+.signatureCoach strong {
+  color: #d9c3ff;
+}
+
+.signatureDeclaration {
+  align-items: flex-start;
+  background: rgba(8, 8, 12, 0.34);
+  border: 1px solid rgba(217, 195, 255, 0.22);
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+  padding: 8px 10px;
+}
+
+.signatureDeclaration small {
+  color: #cdbfcf;
+  font-size: var(--ide-caption);
+}
+
+.signatureDeclaration code {
+  color: #fff2fb;
+  font-size: var(--ide-small);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .wrongAnswerCoach {
   background: rgba(159, 94, 44, 0.18);
   border-color: rgba(237, 164, 102, 0.34);

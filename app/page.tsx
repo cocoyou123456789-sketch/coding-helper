@@ -55,7 +55,7 @@ import {
 } from "./practice-library";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
-import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, pythonErrorSummary, pythonSourceIsEmpty, solutionErrorLine, starterPlaceholderLine, starterRecoveryNeedsConfirmation } from "./run-session";
+import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, normalizeSignatureIssue, pythonErrorSummary, pythonSourceIsEmpty, solutionErrorLine, starterPlaceholderLine, starterRecoveryNeedsConfirmation, type PythonSignatureIssue } from "./run-session";
 import {
   createStudyBackup,
   MAX_STUDY_BACKUP_BYTES,
@@ -110,14 +110,14 @@ type WorkerTestResult = {
   actual: unknown;
   passed: boolean;
   duration: number;
-  error: { name?: string; message?: string; traceback?: string } | null;
+  error: { name?: string; message?: string; traceback?: string; code?: string; symbol?: string } | null;
 };
 
 type RunState =
   | { phase: "idle"; message: string; results: WorkerTestResult[] }
   | { phase: "running"; message: string; results: WorkerTestResult[] }
   | { phase: "done"; message: string; results: WorkerTestResult[]; duration: number; stdout: string; errorLine?: number }
-  | { phase: "error"; kind: "code" | "timeout" | "runtime"; message: string; results: WorkerTestResult[]; stdout?: string; errorLine?: number };
+  | { phase: "error"; kind: "code" | "timeout" | "runtime"; message: string; results: WorkerTestResult[]; stdout?: string; errorLine?: number; signatureIssue?: PythonSignatureIssue };
 
 type BackupOperation = "idle" | "exporting" | "checking" | "restoring";
 
@@ -330,6 +330,13 @@ const pageCopy = {
     wrongAnswerBody: "用这个输入手算一遍，再追踪差异位置的值在哪里写入，不用同时检查整份代码。",
     saveFailedReview: "保存到错题笔记",
     backToErrorLine: (line: number) => `回到第 ${line} 行`,
+    signatureStatus: "题目要求的代码入口被改了",
+    signatureTitle: "先恢复原题要求的代码入口",
+    signatureBody: (symbol: string) => `力扣会按原题寻找 ${symbol}。类名、函数名或参数数量不一致时，算法还没有开始运行；只检查入口这一行，下面的解法可以保留。`,
+    signatureExpected: "原题要求保留",
+    checkSignatureLine: (line: number) => `检查第 ${line} 行入口`,
+    checkSignatureClass: (line: number) => `回到第 ${line} 行 class`,
+    backToSignatureCode: "回到代码检查入口",
     failedTestNote: (index: number, input: string, expected: string, actual: string, detail: string) => `【测试 ${index} 未通过】\n输入：${input}\n预期：${expected}\n实际：${actual}\n先修：${detail}`,
     loadingPython: "正在加载 Python 环境…首次运行会稍慢",
     runningCode: "正在运行…",
@@ -571,6 +578,13 @@ const pageCopy = {
     wrongAnswerBody: "Work through this input once, then trace where the differing value is written. You do not need to inspect the whole solution at once.",
     saveFailedReview: "Save to mistake notes",
     backToErrorLine: (line: number) => `Go to line ${line}`,
+    signatureStatus: "The required problem entry was changed",
+    signatureTitle: "Restore the entry required by the problem",
+    signatureBody: (symbol: string) => `LeetCode looks for ${symbol} exactly as specified. If the class, function, or argument count changes, the algorithm never starts; check only this entry line and keep the solution below it.`,
+    signatureExpected: "Required declaration",
+    checkSignatureLine: (line: number) => `Check entry on line ${line}`,
+    checkSignatureClass: (line: number) => `Go to class on line ${line}`,
+    backToSignatureCode: "Return to the code entry",
     failedTestNote: (index: number, input: string, expected: string, actual: string, detail: string) => `【Test ${index} failed】\nInput: ${input}\nExpected: ${expected}\nActual: ${actual}\nFix first: ${detail}`,
     loadingPython: "Loading Python… the first run may take a moment",
     runningCode: "Running…",
@@ -920,6 +934,7 @@ export default function Home() {
     : firstFailedResult?.error?.message;
   const runtimeFailure = runState.phase === "error" && runState.kind === "runtime";
   const executionTimeout = runState.phase === "error" && runState.kind === "timeout";
+  const signatureIssue = runState.phase === "error" ? runState.signatureIssue : undefined;
   const runErrorLine = runState.phase === "done" || runState.phase === "error"
     ? runState.errorLine
     : undefined;
@@ -2060,7 +2075,7 @@ export default function Home() {
 
     const requestId = `${currentProblem.id}:${++runSequenceRef.current}`;
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-    const worker = workerRef.current ?? new Worker(`${basePath}/python-worker.js`);
+    const worker = workerRef.current ?? new Worker(`${basePath}/python-worker-signature-v1.js`);
     workerRef.current = worker;
     setStarterPromptLine(null);
     setSourceIssue(null);
@@ -2150,12 +2165,18 @@ export default function Home() {
         workerRef.current = null;
         runtimeReadyRef.current = false;
       }
+      const structuredSignatureIssue = kind === "code"
+        ? normalizeSignatureIssue(data.error, currentProblem.signature, currentRecord.code)
+        : null;
       const errorMessage = kind === "runtime"
         ? copy.workerFailed
-        : pythonErrorSummary(data.error?.message) || copy.runFailed;
-      const errorLine = kind === "code"
-        ? solutionErrorLine(`${data.error?.message ?? ""}\n${data.error?.traceback ?? ""}`)
-        : null;
+        : structuredSignatureIssue
+          ? copy.signatureStatus
+          : pythonErrorSummary(data.error?.message) || copy.runFailed;
+      const errorLine = structuredSignatureIssue?.focusLine
+        ?? (kind === "code"
+          ? solutionErrorLine(`${data.error?.message ?? ""}\n${data.error?.traceback ?? ""}`)
+          : null);
       setRunState({
         phase: "error",
         kind,
@@ -2163,6 +2184,7 @@ export default function Home() {
         results: [],
         stdout: data.stdout ?? "",
         errorLine: errorLine ?? undefined,
+        signatureIssue: structuredSignatureIssue ?? undefined,
       });
       revealRunOutcome(errorLine ?? undefined);
     }
@@ -2188,6 +2210,7 @@ export default function Home() {
     worker.postMessage({
       id: requestId,
       code: currentRecord.code,
+      signature: currentProblem.signature,
       tests: currentProblem.tests,
     });
   }
@@ -2736,12 +2759,26 @@ export default function Home() {
             )}
 
             {runErrorForCoaching && (
-              <div className={ideStyles.errorCoach} role="note">
-                <strong>{language === "zh" ? "先修第一处错误" : "Fix the first error first"}</strong>
-                <span>{beginnerPythonErrorHint(runErrorForCoaching, language)}</span>
+              <div className={`${ideStyles.errorCoach} ${signatureIssue ? ideStyles.signatureCoach : ""}`} role="note">
+                <strong>{signatureIssue ? copy.signatureTitle : language === "zh" ? "先修第一处错误" : "Fix the first error first"}</strong>
+                <span>{signatureIssue
+                  ? copy.signatureBody(signatureIssue.symbol)
+                  : beginnerPythonErrorHint(runErrorForCoaching, language)}</span>
+                {signatureIssue && (
+                  <div className={ideStyles.signatureDeclaration}>
+                    <small>{copy.signatureExpected}</small>
+                    <code>{signatureIssue.declaration}</code>
+                  </div>
+                )}
                 <div className={ideStyles.coachActions}>
-                  <button type="button" onClick={() => focusCodeLine(runErrorLine ?? safeActiveCodeLine)}>
-                    {runErrorLine ? copy.backToErrorLine(runErrorLine) : copy.backToEditor}
+                  <button type="button" onClick={() => focusCodeLine(signatureIssue?.focusLine ?? runErrorLine ?? safeActiveCodeLine)}>
+                    {signatureIssue
+                      ? signatureIssue.focusLine === undefined
+                        ? copy.backToSignatureCode
+                        : signatureIssue.focusKind === "class"
+                          ? copy.checkSignatureClass(signatureIssue.focusLine)
+                          : copy.checkSignatureLine(signatureIssue.focusLine)
+                      : runErrorLine ? copy.backToErrorLine(runErrorLine) : copy.backToEditor}
                   </button>
                 </div>
               </div>

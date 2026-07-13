@@ -41,6 +41,15 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /restoreStarterCode\(emptyRecoveryNeedsConfirmation, true\)/);
   assert.match(page, /describeFirstMismatch/);
   assert.match(page, /pythonErrorSummary/);
+  assert.match(page, /normalizeSignatureIssue/);
+  assert.match(page, /python-worker-signature-v1\.js/);
+  assert.match(page, /signature: currentProblem\.signature/);
+  assert.match(page, /signatureIssue\?: PythonSignatureIssue/);
+  assert.match(page, /copy\.signatureTitle/);
+  assert.match(page, /signatureIssue\.declaration/);
+  assert.match(page, /copy\.backToSignatureCode/);
+  assert.match(page, /copy\.checkSignatureClass\(signatureIssue\.focusLine\)/);
+  assert.match(page, /copy\.checkSignatureLine\(signatureIssue\.focusLine\)/);
   assert.match(page, /saveFailedTestToReview/);
   assert.match(page, /onClick=\{\(\) => runTests\(\)\}/);
   assert.match(page, /onRun=\{\(\) => runTests\(\)\}/);
@@ -98,7 +107,7 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /function retryTests\(\)[\s\S]*?runStatusRef\.current\?\.focus/);
   assert.match(page, /onClick=\{retryTests\}>\{copy\.retryRun\}/);
   assert.match(page, /runtimeCoach}[\s\S]*?focusCodeLine\(safeActiveCodeLine\)[\s\S]*?copy\.backToEditor/);
-  assert.match(page, /focusCodeLine\(runErrorLine \?\? safeActiveCodeLine\)/);
+  assert.match(page, /focusCodeLine\(signatureIssue\?\.focusLine \?\? runErrorLine \?\? safeActiveCodeLine\)/);
   assert.match(page, /wrongAnswerCoach}[\s\S]*?focusCodeLine\(safeActiveCodeLine\)[\s\S]*?copy\.backToEditor/);
   assert.match(page, /ref=\{runStatusRef\}[\s\S]*?tabIndex=\{-1\}/);
 
@@ -117,6 +126,9 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.notesDrawer/);
   assert.match(styles, /--ide-caption: max\(12px/);
   assert.match(styles, /\.errorCoach/);
+  assert.match(styles, /\.signatureCoach/);
+  assert.match(styles, /\.signatureDeclaration/);
+  assert.match(styles, /white-space: pre-wrap/);
   assert.match(styles, /\.emptySourceCoach/);
   assert.match(styles, /\.wrongAnswerCoach/);
   assert.match(styles, /\.runtimeCoach/);

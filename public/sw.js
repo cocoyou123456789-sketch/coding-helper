@@ -1,7 +1,7 @@
 /* global self, caches, fetch, URL, Response */
 
-const CACHE_NAME = "algoquest-pwa-2026-07-13-lazy-v2";
-const RUNTIME_CACHE = "algoquest-runtime-2026-07-13-lazy-v2";
+const CACHE_NAME = "algoquest-pwa-2026-07-14-signature-v1";
+const RUNTIME_CACHE = "algoquest-runtime-2026-07-14-signature-v1";
 const SCOPE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 const ROOT_URL = `${SCOPE_PATH}/`;
 const MAX_APP_ASSETS = 200;
@@ -75,6 +75,7 @@ async function cacheAppShell() {
     appUrl("icons/icon-512.png"),
     appUrl("icons/icon-maskable-512.png"),
     appUrl("python-worker.js"),
+    appUrl("python-worker-signature-v1.js"),
   ];
 
   await Promise.allSettled(fixedAssets.map(async (url) => {

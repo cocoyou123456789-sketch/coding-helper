@@ -1,10 +1,130 @@
 import type { Language } from "./problem-i18n";
+import type { ProblemSignature } from "./problems";
 
 type WorkerMessageLike = {
   id?: unknown;
   type?: unknown;
   phase?: unknown;
 };
+
+export type SignatureIssueCode =
+  | "missing_class"
+  | "class_not_type"
+  | "missing_method"
+  | "method_not_callable"
+  | "incompatible_parameters";
+
+export type PythonSignatureIssue = {
+  code: SignatureIssueCode;
+  kind: "class" | "constructor" | "method";
+  symbol: string;
+  declaration: string;
+  focusLine?: number;
+  focusKind?: "declaration" | "class";
+};
+
+type PythonDefinition =
+  | { kind: "class"; name: string; line: number }
+  | { kind: "method"; name: string; className: string; line: number };
+
+const SIGNATURE_ISSUE_CODES = new Set<SignatureIssueCode>([
+  "missing_class",
+  "class_not_type",
+  "missing_method",
+  "method_not_callable",
+  "incompatible_parameters",
+]);
+
+function pythonDefinitions(source: string): PythonDefinition[] {
+  const definitions: PythonDefinition[] = [];
+  let currentClassName: string | null = null;
+  source
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .forEach((rawLine, index) => {
+      const line = rawLine.replace(/^\t/, "    ");
+      const classMatch = line.match(/^class\s+([A-Za-z_]\w*)\s*(?:\([^)]*\))?\s*:/);
+      if (classMatch) {
+        currentClassName = classMatch[1];
+        definitions.push({ kind: "class", name: currentClassName, line: index + 1 });
+        return;
+      }
+      const methodMatch = line.match(/^ {4}def\s+([A-Za-z_]\w*)\s*\(/);
+      if (methodMatch && currentClassName) {
+        definitions.push({ kind: "method", name: methodMatch[1], className: currentClassName, line: index + 1 });
+        return;
+      }
+      if (/^\S/.test(line) && !/^\s*(?:#|@)/.test(line)) currentClassName = null;
+    });
+  return definitions;
+}
+
+function signatureDeclaration(signature: ProblemSignature, symbol: string): {
+  kind: PythonSignatureIssue["kind"];
+  declaration: string;
+} | null {
+  if (symbol === signature.className) {
+    return { kind: "class", declaration: `class ${signature.className}:` };
+  }
+  if (symbol === "__init__") {
+    const params = ["self", ...signature.constructorParams].join(", ");
+    return {
+      kind: "constructor",
+      declaration: `class ${signature.className}:\n    def __init__(${params}):`,
+    };
+  }
+  const method = signature.methods.find((item) => item.name === symbol);
+  if (!method) return null;
+  return {
+    kind: "method",
+    declaration: `class ${signature.className}:\n    def ${method.name}(${["self", ...method.params].join(", ")}):`,
+  };
+}
+
+/** Validate and enrich the worker's structured LeetCode entry-contract error. */
+export function normalizeSignatureIssue(
+  value: unknown,
+  signature: ProblemSignature,
+  currentCode: string,
+): PythonSignatureIssue | null {
+  const issue = objectRecord(value);
+  const code = issue?.code;
+  const symbol = issue?.symbol;
+  if (typeof code !== "string" || !SIGNATURE_ISSUE_CODES.has(code as SignatureIssueCode) || typeof symbol !== "string") {
+    return null;
+  }
+
+  const expected = signatureDeclaration(signature, symbol);
+  if (!expected) return null;
+  if ((code === "missing_class" || code === "class_not_type") && expected.kind !== "class") return null;
+  if ((code === "missing_method" || code === "method_not_callable") && expected.kind !== "method") return null;
+  if (code === "incompatible_parameters" && expected.kind === "class") return null;
+
+  const currentDefinitions = pythonDefinitions(currentCode);
+  const expectedDefinitionKind = expected.kind === "class" ? "class" : "method";
+  const requiredClassDefinition = currentDefinitions.find(
+    (item): item is Extract<PythonDefinition, { kind: "class" }> => item.kind === "class" && item.name === signature.className,
+  );
+  const exactCurrentDefinition = currentDefinitions.find((item) => (
+    item.kind === expectedDefinitionKind
+    && item.name === symbol
+    && (item.kind !== "method" || item.className === signature.className)
+  ));
+  const focusLine = exactCurrentDefinition?.line
+    ?? (expected.kind !== "class" ? requiredClassDefinition?.line : undefined);
+  return {
+    code: code as SignatureIssueCode,
+    kind: expected.kind,
+    symbol,
+    declaration: expected.declaration,
+    ...(focusLine === undefined ? {} : { focusLine }),
+    ...(exactCurrentDefinition
+      ? { focusKind: "declaration" as const }
+      : requiredClassDefinition && expected.kind !== "class"
+        ? { focusKind: "class" as const }
+        : {}),
+  };
+}
 
 /** Treat whitespace and Python comments as an empty attempt before starting the worker. */
 export function pythonSourceIsEmpty(value: unknown): boolean {

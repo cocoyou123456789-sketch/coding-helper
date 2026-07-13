@@ -77,3 +77,26 @@ test("offline navigation with deep-link query uses the cached app shell", async 
     ignoreSearch: true,
   }]);
 });
+
+test("the signature worker path cannot match an older stable worker cache entry", async () => {
+  const fetched = [];
+  const context = workerContext(async (request) => {
+    fetched.push(String(request.url ?? request));
+    return new Response("new signature worker", { status: 200 });
+  });
+  context.caches.open = async () => ({
+    async match(request) {
+      const pathname = new URL(String(request.url ?? request)).pathname;
+      return pathname.endsWith("/python-worker.js")
+        ? new Response("old stable worker", { status: 200 })
+        : undefined;
+    },
+    async put() {},
+  });
+
+  const response = await context.cacheFirst(new Request(`${scope}python-worker-signature-v1.js`));
+
+  assert.equal(await response.text(), "new signature worker");
+  assert.deepEqual(fetched, [`${scope}python-worker-signature-v1.js`]);
+  assert.match(workerSource, /appUrl\("python-worker-signature-v1\.js"\)/);
+});
