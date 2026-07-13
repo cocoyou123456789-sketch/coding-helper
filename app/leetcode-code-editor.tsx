@@ -3,6 +3,7 @@
 import {
   forwardRef,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -32,6 +33,7 @@ export interface LeetCodeCodeEditorHandle {
   focus: () => void;
   indent: () => boolean;
   outdent: () => boolean;
+  revealLine: (lineNumber: number) => void;
 }
 
 export interface LeetCodeCodeEditorProps {
@@ -299,6 +301,7 @@ export const LeetCodeCodeEditor = forwardRef<
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const helpId = useId();
   const viewRef = useRef<EditorView | null>(null);
   const initialValueRef = useRef(value);
   const initialFontSizeRef = useRef(fontSize);
@@ -334,6 +337,17 @@ export const LeetCodeCodeEditor = forwardRef<
     outdent() {
       return viewRef.current ? indentLess(viewRef.current) : false;
     },
+    revealLine(lineNumber) {
+      const view = viewRef.current;
+      if (!view || !Number.isInteger(lineNumber)) return;
+      const safeLineNumber = Math.min(Math.max(1, lineNumber), view.state.doc.lines);
+      const line = view.state.doc.line(safeLineNumber);
+      view.dispatch({
+        selection: { anchor: line.from },
+        effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+      });
+      view.focus();
+    },
   }), []);
 
   useEffect(() => {
@@ -352,6 +366,7 @@ export const LeetCodeCodeEditor = forwardRef<
         fontSizeCompartmentRef.current.of(fontSizeTheme(initialFontSizeRef.current)),
         accessibilityCompartmentRef.current.of(EditorView.contentAttributes.of({
           "aria-label": initialAriaLabelRef.current,
+          "aria-describedby": helpId,
           "aria-multiline": "true",
           "aria-keyshortcuts": "Control+Enter Meta+Enter",
           spellcheck: "false",
@@ -385,7 +400,7 @@ export const LeetCodeCodeEditor = forwardRef<
       viewRef.current = null;
       view.destroy();
     };
-  }, [completionSource]);
+  }, [completionSource, helpId]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -418,6 +433,7 @@ export const LeetCodeCodeEditor = forwardRef<
     view.dispatch({
       effects: accessibilityCompartmentRef.current.reconfigure(EditorView.contentAttributes.of({
         "aria-label": ariaLabel,
+        "aria-describedby": helpId,
         "aria-multiline": "true",
         "aria-keyshortcuts": "Control+Enter Meta+Enter",
         spellcheck: "false",
@@ -425,9 +441,18 @@ export const LeetCodeCodeEditor = forwardRef<
         autocorrect: "off",
       })),
     });
-  }, [ariaLabel]);
+  }, [ariaLabel, helpId]);
 
-  return <div ref={hostRef} className="leetcode-code-editor" style={rootStyle} />;
+  return (
+    <div style={rootStyle}>
+      <p id={helpId} className="sr-only">
+        {language === "zh"
+          ? "Tab 用于缩进。要离开编辑器，请先按 Escape，再按 Tab。按 Command 或 Control 加 Enter 运行测试。"
+          : "Tab indents code. To leave the editor, press Escape and then Tab. Press Command or Control plus Enter to run tests."}
+      </p>
+      <div ref={hostRef} className="leetcode-code-editor" style={rootStyle} />
+    </div>
+  );
 });
 
 LeetCodeCodeEditor.displayName = "LeetCodeCodeEditor";

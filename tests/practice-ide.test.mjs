@@ -15,6 +15,10 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /去 LeetCode 提交/);
   assert.match(page, /setShowProblemList/);
   assert.match(page, /setShowNotesDrawer/);
+  assert.match(page, /messageBelongsToRun/);
+  assert.match(page, /activeRunRef/);
+  assert.match(page, /cancelActiveRun/);
+  assert.doesNotMatch(page, /if \(allPassed\) updateRecord\(\{ status: "solved" \}\)/);
   assert.doesNotMatch(page, /className="code-field"/);
 
   assert.match(editor, /EditorView/);
@@ -26,5 +30,7 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
 
   assert.match(styles, /grid-template-columns: minmax\(330px, 42%\)/);
   assert.match(styles, /\.notesDrawer/);
+  assert.match(styles, /--ide-caption: max\(12px/);
+  assert.match(styles, /\.errorCoach/);
   assert.match(styles, /@media \(max-width: 760px\)/);
 });

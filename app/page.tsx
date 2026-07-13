@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   syncLineNotes,
   type LineNoteEdit,
@@ -29,6 +29,7 @@ import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
+import { beginnerPythonErrorHint, messageBelongsToRun, solutionErrorLine } from "./run-session";
 
 export const dynamic = "force-static";
 
@@ -53,7 +54,7 @@ type WorkerTestResult = {
   actual: unknown;
   passed: boolean;
   duration: number;
-  error: { name?: string; message?: string } | null;
+  error: { name?: string; message?: string; traceback?: string } | null;
 };
 
 type RunState =
@@ -447,6 +448,38 @@ function yesterdayKey(): string {
   return localDateKey(date);
 }
 
+const DRAWER_FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function trapDrawerFocus(event: ReactKeyboardEvent<HTMLElement>, close: () => void) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE))
+    .filter((element) => element.getClientRects().length > 0 && !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 export default function Home() {
   const nativeApp = isNativeAppBuild();
   const [selectedId, setSelectedId] = useState(problems[0].id);
@@ -474,7 +507,13 @@ export default function Home() {
   const workerRef = useRef<Worker | null>(null);
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runSequenceRef = useRef(0);
+  const activeRunRef = useRef<{ id: string; cleanup: () => void } | null>(null);
   const codeEditorRef = useRef<LeetCodeCodeEditorHandle | null>(null);
+  const problemMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const notesButtonRef = useRef<HTMLButtonElement | null>(null);
+  const libraryDrawerRef = useRef<HTMLElement | null>(null);
+  const notesDrawerRef = useRef<HTMLElement | null>(null);
 
   const copy = pageCopy[language];
   const brandSubtitle = nativeApp ? copy.nativeBrandSubtitle : copy.brandSubtitle;
@@ -497,6 +536,9 @@ export default function Home() {
   const allQuickTestsPassed = runState.phase === "done"
     && runState.results.length > 0
     && runState.results.every((result) => result.passed);
+  const runErrorForCoaching = runState.phase === "error"
+    ? runState.message
+    : runState.results.find((result) => result.error)?.error?.message;
   const fontScale = Math.round((fontSize / MIN_FONT_SIZE) * 100);
 
   const topics = useMemo(
@@ -514,7 +556,7 @@ export default function Home() {
         String(problem.id).includes(keyword) ||
         problem.title.toLowerCase().includes(keyword) ||
         problem.topic.toLowerCase().includes(keyword);
-      return keyword ? matchesSearch : matchesTopic && matchesDifficulty;
+      return matchesTopic && matchesDifficulty && matchesSearch;
     }).sort((first, second) => difficultyOrder[first.difficulty] - difficultyOrder[second.difficulty]);
   }, [difficultyFilter, displayProblems, search, topic]);
 
@@ -609,10 +651,46 @@ export default function Home() {
 
   useEffect(() => {
     return () => {
+      activeRunRef.current?.cleanup();
+      activeRunRef.current = null;
       workerRef.current?.terminate();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showProblemList) return;
+    const frame = window.requestAnimationFrame(() => {
+      const drawer = libraryDrawerRef.current;
+      (drawer?.querySelector<HTMLElement>("input") ?? drawer?.querySelector<HTMLElement>("button"))?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showProblemList]);
+
+  useEffect(() => {
+    if (!showNotesDrawer) return;
+    const frame = window.requestAnimationFrame(() => {
+      notesDrawerRef.current?.querySelector<HTMLElement>("button, textarea")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showNotesDrawer]);
+
+  useEffect(() => {
+    if (!showProblemList && !showNotesDrawer) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (showProblemList) {
+        setShowProblemList(false);
+        window.requestAnimationFrame(() => problemMenuButtonRef.current?.focus());
+      } else {
+        setShowNotesDrawer(false);
+        window.requestAnimationFrame(() => notesButtonRef.current?.focus());
+      }
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showNotesDrawer, showProblemList]);
 
   function updateRecord(patch: Partial<StudyRecord>) {
     setRecords((previous) => ({
@@ -667,6 +745,40 @@ export default function Home() {
     setProfile((previous) => score > previous.sprintBest ? { ...previous, sprintBest: score } : previous);
   }
 
+  function cancelActiveRun() {
+    const activeRun = activeRunRef.current;
+    if (!activeRun) return;
+    activeRun.cleanup();
+    activeRunRef.current = null;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = null;
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    runtimeReadyRef.current = false;
+  }
+
+  function openProblemListDrawer() {
+    setShowNotesDrawer(false);
+    setShowProblemList(true);
+    setMobileWorkspaceTab("library");
+  }
+
+  function closeProblemListDrawer(restoreFocus = true) {
+    setShowProblemList(false);
+    if (restoreFocus) window.requestAnimationFrame(() => problemMenuButtonRef.current?.focus());
+  }
+
+  function openNotesDrawer() {
+    setShowProblemList(false);
+    setShowNotesDrawer(true);
+    setMobileWorkspaceTab("notes");
+  }
+
+  function closeNotesDrawer(restoreFocus = true) {
+    setShowNotesDrawer(false);
+    if (restoreFocus) window.requestAnimationFrame(() => notesButtonRef.current?.focus());
+  }
+
   function openProblemFromPath(id: number) {
     chooseProblem(id);
     setAppMode("workspace");
@@ -676,16 +788,19 @@ export default function Home() {
 
   function chooseProblem(id: number) {
     void playSelectionHaptic();
+    cancelActiveRun();
     setSelectedId(id);
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setNoteTab("line");
     setShowStatement(true);
-    setShowProblemList(false);
+    closeProblemListDrawer(false);
     setMobileWorkspaceTab("code");
+    window.requestAnimationFrame(() => codeEditorRef.current?.focus());
   }
 
   function showAppMode(nextMode: "path" | "workspace" | "course") {
     void playSelectionHaptic();
+    if (nextMode !== "workspace") cancelActiveRun();
     setAppMode(nextMode);
     setShowProblemList(false);
     setShowNotesDrawer(false);
@@ -695,11 +810,10 @@ export default function Home() {
 
   function selectLanguage(nextLanguage: Language) {
     void playSelectionHaptic();
+    cancelActiveRun();
     setLanguage(nextLanguage);
     setTopic("all");
-    setRunState((previous) => previous.phase === "running"
-      ? previous
-      : { phase: "idle", message: pageCopy[nextLanguage].notRun, results: [] });
+    setRunState({ phase: "idle", message: pageCopy[nextLanguage].notRun, results: [] });
   }
 
   function reminderResultMessage(result: ReminderSaveResult): string {
@@ -784,11 +898,14 @@ export default function Home() {
 
   function resetCode() {
     if (!window.confirm(copy.resetConfirm)) return;
+    cancelActiveRun();
     updateRecord({ code: currentProblem.starterCode, status: "todo" });
     setRunState({ phase: "idle", message: copy.resetMessage, results: [] });
   }
 
   function updateEditorCode(nextCode: string, lineNoteEdit?: LineNoteEdit) {
+    cancelActiveRun();
+    setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setRecords((previous) => {
       const previousRecord = mergeRecord(currentProblem, previous[currentProblem.id]);
       return {
@@ -808,10 +925,11 @@ export default function Home() {
   }
 
   function runTests() {
-    if (runState.phase === "running") return;
+    if (runState.phase === "running" || activeRunRef.current) return;
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
+    const requestId = `${currentProblem.id}:${++runSequenceRef.current}`;
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const worker = workerRef.current ?? new Worker(`${basePath}/python-worker.js`);
     workerRef.current = worker;
@@ -823,10 +941,19 @@ export default function Home() {
       worker.removeEventListener("error", handleWorkerError);
     }
 
+    function finishActiveRequest(): boolean {
+      if (activeRunRef.current?.id !== requestId) return false;
+      cleanupWorkerListeners();
+      activeRunRef.current = null;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      return true;
+    }
+
     const armTimeout = (duration: number) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
-        cleanupWorkerListeners();
+        if (!finishActiveRequest()) return;
         worker.terminate();
         workerRef.current = null;
         runtimeReadyRef.current = false;
@@ -841,6 +968,7 @@ export default function Home() {
 
     function handleWorkerMessage(event: MessageEvent) {
       const data = event.data;
+      if (activeRunRef.current?.id !== requestId || !messageBelongsToRun(data, requestId)) return;
       if (data.type === "status") {
         if (data.status === "ready") {
           runtimeReadyRef.current = true;
@@ -854,12 +982,14 @@ export default function Home() {
         return;
       }
 
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      cleanupWorkerListeners();
+      if (!finishActiveRequest()) return;
 
       if (data.type === "result") {
         const results = (data.results ?? []) as WorkerTestResult[];
         const allPassed = results.length > 0 && results.every((result) => result.passed);
+        const firstError = results.find((result) => result.error)?.error;
+        const errorLine = solutionErrorLine(`${firstError?.message ?? ""}\n${firstError?.traceback ?? ""}`);
+        if (errorLine) window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(errorLine));
         void playTestHaptic(allPassed);
         setRunState({
           phase: "done",
@@ -868,21 +998,22 @@ export default function Home() {
           duration: data.duration ?? 0,
           stdout: data.stdout ?? "",
         });
-        if (allPassed) updateRecord({ status: "solved" });
         return;
       }
 
+      const errorMessage = data.error?.message ?? copy.runFailed;
+      const errorLine = solutionErrorLine(`${errorMessage}\n${data.error?.traceback ?? ""}`);
+      if (errorLine) window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(errorLine));
       setRunState({
         phase: "error",
-        message: data.error?.message ?? copy.runFailed,
+        message: errorMessage,
         results: [],
         stdout: data.stdout ?? "",
       });
     }
 
     function handleWorkerError(event: ErrorEvent) {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      cleanupWorkerListeners();
+      if (!finishActiveRequest()) return;
       worker.terminate();
       workerRef.current = null;
       runtimeReadyRef.current = false;
@@ -895,9 +1026,10 @@ export default function Home() {
 
     worker.addEventListener("message", handleWorkerMessage);
     worker.addEventListener("error", handleWorkerError);
+    activeRunRef.current = { id: requestId, cleanup: cleanupWorkerListeners };
 
     worker.postMessage({
-      id: String(currentProblem.id),
+      id: requestId,
       code: currentRecord.code,
       tests: currentProblem.tests,
     });
@@ -996,11 +1128,12 @@ export default function Home() {
           <h1 id="practice-workspace-title" className="sr-only">{copy.practiceWorkspaceTitle}</h1>
           <div className={ideStyles.topbarPrimary}>
             <button
+              ref={problemMenuButtonRef}
               type="button"
               className={ideStyles.problemMenuButton}
               aria-expanded={showProblemList}
               aria-controls="mobile-library-panel"
-              onClick={() => { setShowProblemList(true); setShowNotesDrawer(false); setMobileWorkspaceTab("library"); }}
+              onClick={openProblemListDrawer}
             >
               <span className={ideStyles.problemMenuIcon} aria-hidden="true">☰</span>
               <span>{language === "zh" ? "题目列表" : "Problem list"}</span>
@@ -1012,11 +1145,12 @@ export default function Home() {
           </div>
           <div className={ideStyles.topbarActions}>
             <button
+              ref={notesButtonRef}
               type="button"
               className={ideStyles.notesButton}
               aria-expanded={showNotesDrawer}
               aria-controls="mobile-notes-panel"
-              onClick={() => { setShowNotesDrawer(true); setShowProblemList(false); setMobileWorkspaceTab("notes"); }}
+              onClick={openNotesDrawer}
             >
               <span aria-hidden="true">✎</span>
               <span>{language === "zh" ? "笔记" : "Notes"}</span>
@@ -1038,22 +1172,30 @@ export default function Home() {
             type="button"
             className={ideStyles.drawerBackdrop}
             aria-label={language === "zh" ? "关闭侧栏" : "Close drawer"}
-            onClick={() => { setShowProblemList(false); setShowNotesDrawer(false); }}
+            onClick={() => { if (showProblemList) closeProblemListDrawer(); else closeNotesDrawer(); }}
           />
         )}
         <nav className="mobile-workspace-tabs" role="tablist" aria-label={copy.mobileWorkspace}>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={() => { setShowProblemList(true); setShowNotesDrawer(false); setMobileWorkspaceTab("library"); }}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={openProblemListDrawer}>
             <span aria-hidden="true">☷</span>{copy.mobileProblemList}
           </button>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => { setShowProblemList(false); setShowNotesDrawer(false); setMobileWorkspaceTab("code"); }}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => { closeProblemListDrawer(false); closeNotesDrawer(false); setMobileWorkspaceTab("code"); }}>
             <span aria-hidden="true">{">_"}</span>{copy.mobileCode}
           </button>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={() => { setShowProblemList(false); setShowNotesDrawer(true); setMobileWorkspaceTab("notes"); }}>
+          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={openNotesDrawer}>
             <span aria-hidden="true">✎</span>{copy.mobileNotes}
           </button>
         </nav>
-        <aside id="mobile-library-panel" role="tabpanel" className={`panel library-panel mobile-workspace-pane ${ideStyles.libraryDrawer} ${showProblemList ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`} aria-label={libraryTitle}>
-          <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭题目列表" : "Close problem list"} onClick={() => { setShowProblemList(false); setMobileWorkspaceTab("code"); }}>×</button>
+        <aside
+          id="mobile-library-panel"
+          ref={libraryDrawerRef}
+          role={showProblemList ? "dialog" : "tabpanel"}
+          aria-modal={showProblemList ? true : undefined}
+          className={`panel library-panel mobile-workspace-pane ${ideStyles.libraryDrawer} ${showProblemList ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`}
+          aria-label={libraryTitle}
+          onKeyDown={(event) => trapDrawerFocus(event, closeProblemListDrawer)}
+        >
+          <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭题目列表" : "Close problem list"} onClick={() => { closeProblemListDrawer(); setMobileWorkspaceTab("code"); }}>×</button>
           <div className="library-head">
             <div className="section-kicker">LEARNING MAP</div>
             <div className="library-title-row">
@@ -1250,6 +1392,13 @@ export default function Home() {
               </div>
             </div>
 
+            {runErrorForCoaching && (
+              <div className={ideStyles.errorCoach} role="note">
+                <strong>{language === "zh" ? "先修第一处错误" : "Fix the first error first"}</strong>
+                <span>{beginnerPythonErrorHint(runErrorForCoaching, language)}</span>
+              </div>
+            )}
+
             <div className="test-cases">
               {(runState.results.length ? runState.results : currentProblem.tests).map((test, index) => {
                 const result = "passed" in test ? test as WorkerTestResult : null;
@@ -1268,7 +1417,7 @@ export default function Home() {
             </div>
 
             {allQuickTestsPassed && (
-              <button className="next-review-button" type="button" onClick={() => { setNoteTab("review"); setShowNotesDrawer(true); setMobileWorkspaceTab("notes"); }}>
+              <button className="next-review-button" type="button" onClick={() => { setNoteTab("review"); openNotesDrawer(); }}>
                 {copy.nextReview}
               </button>
             )}
@@ -1279,8 +1428,16 @@ export default function Home() {
           </section>
         </section>
 
-        <aside id="mobile-notes-panel" role="tabpanel" className={`panel notes-panel mobile-workspace-pane ${ideStyles.notesDrawer} ${showNotesDrawer ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "notes" ? "is-mobile-active" : ""}`} aria-label={copy.notebookLabel}>
-          <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭笔记" : "Close notes"} onClick={() => { setShowNotesDrawer(false); setMobileWorkspaceTab("code"); }}>×</button>
+        <aside
+          id="mobile-notes-panel"
+          ref={notesDrawerRef}
+          role={showNotesDrawer ? "dialog" : "tabpanel"}
+          aria-modal={showNotesDrawer ? true : undefined}
+          className={`panel notes-panel mobile-workspace-pane ${ideStyles.notesDrawer} ${showNotesDrawer ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "notes" ? "is-mobile-active" : ""}`}
+          aria-label={copy.notebookLabel}
+          onKeyDown={(event) => trapDrawerFocus(event, closeNotesDrawer)}
+        >
+          <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭笔记" : "Close notes"} onClick={() => { closeNotesDrawer(); setMobileWorkspaceTab("code"); }}>×</button>
           <div className="notes-head">
             <div>
               <div className="section-kicker">MY NOTEBOOK</div>
@@ -1304,7 +1461,7 @@ export default function Home() {
               <strong>{currentProblem.id}. {currentProblem.title}</strong>
               <span>{copy.difficultyLabels[currentProblem.difficulty]} · {currentProblem.topic}</span>
             </div>
-            <button type="button" onClick={() => { setShowNotesDrawer(false); setMobileWorkspaceTab("code"); }}>{copy.viewProblemAndCode}</button>
+            <button type="button" onClick={() => { closeNotesDrawer(); setMobileWorkspaceTab("code"); }}>{copy.viewProblemAndCode}</button>
           </div>
 
           {noteTab === "line" ? (

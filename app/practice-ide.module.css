@@ -1,4 +1,7 @@
 .workspace {
+  --ide-caption: max(12px, 0.68rem);
+  --ide-small: max(13px, 0.72rem);
+  --ide-body: max(14px, 0.78rem);
   isolation: isolate;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 50px minmax(0, 1fr);
@@ -43,7 +46,7 @@
   align-items: center;
   border-radius: 7px;
   display: inline-flex;
-  font-size: 0.625rem;
+  font-size: var(--ide-small);
   font-weight: 750;
   justify-content: center;
   min-height: 36px;
@@ -83,13 +86,13 @@
 }
 
 .currentProblem strong {
-  font-size: 0.6875rem;
+  font-size: var(--ide-body);
   letter-spacing: -0.01em;
 }
 
 .currentProblem span {
   color: #9e9e9e;
-  font-size: 0.5625rem;
+  font-size: var(--ide-caption);
   margin-left: 8px;
 }
 
@@ -159,7 +162,7 @@
   border-bottom: 2px solid #f0a3b8;
   color: #f4f4f4;
   display: inline-flex;
-  font-size: 0.625rem;
+  font-size: var(--ide-small);
   font-weight: 800;
   height: 46px;
 }
@@ -218,12 +221,12 @@
 
 .problemPane :global(.statement-example-list b) {
   color: #c8c8c8;
-  font-size: 0.5rem;
+  font-size: var(--ide-caption);
 }
 
 .problemPane :global(.statement-example-list p) {
   color: #c9c9c9;
-  font-size: 0.5rem;
+  font-size: var(--ide-caption);
   line-height: 1.5;
   margin: 1px 0 0;
 }
@@ -242,6 +245,26 @@
   border-left-color: #ee96ae;
 }
 
+.problemPane :global(.brief-topline),
+.problemPane :global(.statement-head small),
+.problemPane :global(.statement-facts span),
+.problemPane :global(.statement-requirements > span) {
+  font-size: var(--ide-caption);
+}
+
+.problemPane :global(.statement-head strong),
+.problemPane :global(.statement-facts code),
+.problemPane :global(.statement-requirements ul) {
+  font-size: var(--ide-small);
+}
+
+.problemPane :global(.statement-body > p),
+.problemPane :global(.statement-panel > .problem-summary),
+.problemPane :global(.hint-row p),
+.problemPane :global(.hint-row b) {
+  font-size: var(--ide-body);
+}
+
 .editorToolbar {
   background: #262626;
   border-bottom-color: #383838;
@@ -257,7 +280,7 @@
   border-radius: 6px;
   color: #f0f0f0;
   font-family: var(--font-code);
-  font-size: 0.625rem;
+  font-size: var(--ide-small);
   font-weight: 700;
   min-height: 32px;
   padding: 0 27px 0 10px;
@@ -271,7 +294,7 @@
 .languageWrap::after {
   color: #aaa;
   content: "⌄";
-  font-size: 0.625rem;
+  font-size: var(--ide-small);
   pointer-events: none;
   position: absolute;
   right: 9px;
@@ -295,6 +318,43 @@
   max-height: min(31dvh, 290px);
   scrollbar-color: #555 transparent;
   scrollbar-width: thin;
+}
+
+.errorCoach {
+  background: rgba(178, 65, 82, 0.16);
+  border: 1px solid rgba(238, 150, 174, 0.34);
+  border-radius: 8px;
+  color: #f4dce4;
+  display: grid;
+  gap: 3px;
+  margin-top: 9px;
+  padding: 9px 10px;
+}
+
+.errorCoach strong {
+  color: #ffb4c6;
+  font-size: var(--ide-small);
+}
+
+.errorCoach span {
+  font-size: var(--ide-caption);
+  line-height: 1.55;
+}
+
+.focusPanel :global(.dark-button),
+.focusPanel :global(.run-button),
+.focusPanel :global(.console-head > div:first-child strong),
+.focusPanel :global(.console-status),
+.focusPanel :global(.test-card-title strong) {
+  font-size: var(--ide-small);
+}
+
+.focusPanel :global(.shortcut-label),
+.focusPanel :global(.console-head > div:first-child span),
+.focusPanel :global(.test-card-title span),
+.focusPanel :global(.test-card p),
+.focusPanel :global(.stdout-block) {
+  font-size: var(--ide-caption);
 }
 
 .focusPanel :global(.run-button) {
@@ -381,8 +441,34 @@
 
 .drawerHint {
   color: #9e9e9e;
-  font-size: 0.5625rem;
+  font-size: var(--ide-caption);
   margin-left: 7px;
+}
+
+.libraryDrawer :global(.section-kicker),
+.libraryDrawer :global(.problem-name small),
+.libraryDrawer :global(.problem-number),
+.libraryDrawer :global(.topic-field > span),
+.notesDrawer :global(.section-kicker),
+.notesDrawer :global(.notes-problem-label),
+.notesDrawer :global(.line-note-intro p),
+.notesDrawer :global(.line-note-card code),
+.notesDrawer :global(.review-notes-view small) {
+  font-size: var(--ide-caption);
+}
+
+.libraryDrawer :global(.problem-name strong),
+.libraryDrawer :global(.difficulty),
+.notesDrawer :global(.note-tabs button),
+.notesDrawer :global(.line-note-intro strong),
+.notesDrawer :global(.review-notes-view > label > span),
+.notesDrawer :global(.status-buttons button) {
+  font-size: var(--ide-small);
+}
+
+.notesDrawer :global(.line-note-card textarea),
+.notesDrawer :global(.review-notes-view textarea) {
+  font-size: max(16px, var(--ide-body));
 }
 
 @media (max-width: 1120px) and (min-width: 761px) {
@@ -436,7 +522,7 @@
   }
 
   .currentProblem strong {
-    font-size: 0.75rem;
+    font-size: var(--ide-body);
   }
 
   .drawerBackdrop {
