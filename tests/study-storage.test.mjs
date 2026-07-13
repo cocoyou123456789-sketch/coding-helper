@@ -6,6 +6,7 @@ import {
   normalizeSavedStudy,
   normalizeStudyRecord,
   parseStoredJson,
+  persistWithStatus,
 } from "../app/study-storage.ts";
 
 const problems = [
@@ -68,4 +69,9 @@ test("invalid saved JSON can be discarded without blocking startup", () => {
   assert.equal(parseStoredJson("{unfinished"), undefined);
   assert.deepEqual(parseStoredJson('{"records":{}}'), { records: {} });
   assert.deepEqual(normalizeSavedStudy(parseStoredJson("not-json"), problems), { records: {} });
+});
+
+test("storage failures become a visible status instead of an unhandled rejection", async () => {
+  assert.equal(await persistWithStatus(async () => undefined), "saved");
+  assert.equal(await persistWithStatus(async () => { throw new Error("quota full"); }), "error");
 });

@@ -13,8 +13,18 @@ export type StudyRecord = {
 };
 
 export type StudyRecords = Record<number, StudyRecord>;
+export type SaveState = "saved" | "saving" | "error";
 
 export const STUDY_STORAGE_VERSION = 2;
+
+export async function persistWithStatus(operation: () => Promise<void>): Promise<"saved" | "error"> {
+  try {
+    await operation();
+    return "saved";
+  } catch {
+    return "error";
+  }
+}
 
 const VALID_STATUSES = new Set<LearningStatus>(["todo", "learning", "solved", "review"]);
 

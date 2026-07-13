@@ -35,7 +35,9 @@ import {
   normalizeSavedStudy,
   normalizeStudyRecord,
   parseStoredJson,
+  persistWithStatus,
   type LearningStatus,
+  type SaveState,
   type StudyRecord,
   type StudyRecords,
 } from "./study-storage";
@@ -94,6 +96,9 @@ const pageCopy = {
     progress: "学习进度",
     autosave: "笔记自动保存在本机",
     nativeAutosave: "代码和笔记已保存在这台设备",
+    saving: "正在保存…",
+    saveFailed: "保存失败，请先复制重要笔记",
+    saveRecovery: "浏览器没有保存刚才的更改。请先复制重要笔记，并清理一些本机存储空间。",
     freePractice: "完整题练习",
     learningPath: "学习首页",
     courseNotes: "课程笔记",
@@ -234,6 +239,9 @@ const pageCopy = {
     progress: "Progress",
     autosave: "Notes save automatically on this device",
     nativeAutosave: "Code and notes are saved on this device",
+    saving: "Saving…",
+    saveFailed: "Save failed — copy important notes now",
+    saveRecovery: "Your latest change was not saved. Copy important notes now and free some storage on this device.",
     freePractice: "Full Practice",
     learningPath: "Study Home",
     courseNotes: "Course Notes",
@@ -505,6 +513,7 @@ export default function Home() {
   const [activeCodeLine, setActiveCodeLine] = useState(1);
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
   const [hydrated, setHydrated] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showGuide, setShowGuide] = useState(false);
   const [showStatement, setShowStatement] = useState(true);
   const [showProblemList, setShowProblemList] = useState(false);
@@ -522,6 +531,7 @@ export default function Home() {
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runSequenceRef = useRef(0);
+  const saveSequenceRef = useRef(0);
   const activeRunRef = useRef<{ id: string; cleanup: () => void } | null>(null);
   const codeEditorRef = useRef<LeetCodeCodeEditorHandle | null>(null);
   const problemMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -534,6 +544,7 @@ export default function Home() {
   const copy = pageCopy[language];
   const brandSubtitle = nativeApp ? copy.nativeBrandSubtitle : copy.brandSubtitle;
   const autosaveLabel = nativeApp ? copy.nativeAutosave : copy.autosave;
+  const visibleSaveLabel = saveState === "saving" ? copy.saving : saveState === "error" ? copy.saveFailed : autosaveLabel;
   const libraryTitle = nativeApp ? copy.nativeLibraryTitle : copy.libraryTitle;
   const statementNote = nativeApp ? copy.nativeStatementNote : copy.statementNote;
   const testHelp = nativeApp ? copy.nativeTestHelp : copy.testHelp;
@@ -645,21 +656,33 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
+    const sequence = ++saveSequenceRef.current;
+    let cancelled = false;
+    const savingTimer = window.setTimeout(() => {
+      if (saveSequenceRef.current === sequence) setSaveState("saving");
+    }, 0);
     const timer = window.setTimeout(() => {
-      void setStoredValue(STORAGE_KEY, JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId }));
+      void persistWithStatus(() => setStoredValue(STORAGE_KEY, JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId })))
+        .then((result) => {
+          if (!cancelled && saveSequenceRef.current === sequence) setSaveState(result);
+        });
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(savingTimer);
+      window.clearTimeout(timer);
+    };
   }, [hydrated, records, selectedId]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
     if (!hydrated) return;
-    void setStoredValue(FONT_SIZE_KEY, String(fontSize));
+    void persistWithStatus(() => setStoredValue(FONT_SIZE_KEY, String(fontSize)));
   }, [fontSize, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
-    void setStoredValue(PROFILE_KEY, JSON.stringify(profile));
+    void persistWithStatus(() => setStoredValue(PROFILE_KEY, JSON.stringify(profile)));
   }, [hydrated, profile]);
 
   useEffect(() => {
@@ -668,7 +691,7 @@ export default function Home() {
       ? (language === "zh" ? "题解簿｜算法学习手账" : "AlgoQuest | Algorithm Study Notebook")
       : (language === "zh" ? "题解簿｜LeetCode Hot 100 小白学习工作台" : "AlgoQuest | LeetCode Hot 100 Learning Path");
     if (!hydrated) return;
-    void setStoredValue(LANGUAGE_KEY, language);
+    void persistWithStatus(() => setStoredValue(LANGUAGE_KEY, language));
   }, [hydrated, language, nativeApp]);
 
   useEffect(() => {
@@ -1129,7 +1152,7 @@ export default function Home() {
         </div>
 
         <div className="header-actions">
-          <span className="save-state"><i />{autosaveLabel}</span>
+          <span className={`save-state ${saveState === "saving" ? headerStyles.saveSaving : saveState === "error" ? headerStyles.saveError : ""}`} role="status"><i />{visibleSaveLabel}</span>
           <nav className="app-mode-nav" aria-label={copy.appNavigation}>
             <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
             <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onMouseEnter={() => { void loadCodeEditor(); }} onFocus={() => { void loadCodeEditor(); }} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
@@ -1178,6 +1201,13 @@ export default function Home() {
           <button className="button button-quiet" type="button" onClick={() => setShowGuide(true)}>{copy.guide}</button>
         </div>
       </header>
+
+      {saveState === "error" && (
+        <div className={headerStyles.saveErrorBanner} role="alert">
+          <strong>{copy.saveFailed}</strong>
+          <span>{copy.saveRecovery}</span>
+        </div>
+      )}
 
       {appMode === "path" ? (
         <LearningHub
