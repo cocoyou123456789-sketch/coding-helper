@@ -77,6 +77,8 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.match(pageSource, /测试通过，下一步：写复盘/);
   assert.match(pageSource, /mobile-workspace-tabs/);
   assert.match(pageSource, /wrap="off"/);
+  assert.match(pageSource, /Enter 自动缩进/);
+  assert.match(pageSource, /editForEnter/);
   assert.match(pwaSource, /serviceWorker\.register/);
   assert.match(pwaSource, /安装 App/);
   assert.match(workerSource, /Pyodide/);

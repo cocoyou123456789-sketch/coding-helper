@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  editForBackspace,
+  editForBracket,
+  editForEnter,
+  editForTab,
+  syncLineNotes,
+  type EditorEdit,
+  type LineNoteEdit,
+} from "./code-editor";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import {
   clearStoredStudyData,
@@ -125,7 +134,7 @@ const pageCopy = {
     requirements: "注意事项",
     beginnerHint: "小白提示",
     targetComplexity: "目标复杂度：",
-    shortcut: "⌘ / Ctrl + Enter 运行",
+    shortcut: "Enter 自动缩进 · Tab 调整缩进 · ⌘ / Ctrl + Enter 运行",
     resetCode: "恢复初始代码",
     run: "运行测试",
     running: "运行中…",
@@ -259,7 +268,7 @@ const pageCopy = {
     requirements: "Key rules",
     beginnerHint: "Beginner hint",
     targetComplexity: "Target: ",
-    shortcut: "⌘ / Ctrl + Enter to run",
+    shortcut: "Enter auto-indents · Tab adjusts indent · ⌘ / Ctrl + Enter to run",
     resetCode: "Reset starter code",
     run: "Run tests",
     running: "Running…",
@@ -767,58 +776,39 @@ export default function Home() {
     setRunState({ phase: "idle", message: copy.resetMessage, results: [] });
   }
 
+  function updateEditorCode(nextCode: string, lineNoteEdit?: LineNoteEdit) {
+    setRecords((previous) => {
+      const previousRecord = mergeRecord(currentProblem, previous[currentProblem.id]);
+      return {
+        ...previous,
+        [currentProblem.id]: {
+          ...previousRecord,
+          code: nextCode,
+          lineNotes: syncLineNotes(previousRecord.code, nextCode, previousRecord.lineNotes, lineNoteEdit),
+        },
+      };
+    });
+  }
+
+  function applyEditorEdit(edit: EditorEdit, lineNoteEdit?: LineNoteEdit) {
+    updateEditorCode(edit.code, lineNoteEdit);
+    window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      editor.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+    });
+  }
+
   function adjustEditorIndent(direction: "in" | "out") {
     const editor = editorRef.current;
     if (!editor) return;
-    const code = currentRecord.code;
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-
-    if (start === end) {
-      if (direction === "in") {
-        const nextCode = `${code.slice(0, start)}    ${code.slice(end)}`;
-        updateRecord({ code: nextCode });
-        window.requestAnimationFrame(() => {
-          editor.focus();
-          editor.selectionStart = editor.selectionEnd = start + 4;
-        });
-        return;
-      }
-
-      const lineStart = code.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
-      const leadingSpaces = code.slice(lineStart, start).match(/^ {1,4}/)?.[0].length ?? 0;
-      if (!leadingSpaces) return;
-      const nextCode = `${code.slice(0, lineStart)}${code.slice(lineStart + leadingSpaces)}`;
-      updateRecord({ code: nextCode });
-      window.requestAnimationFrame(() => {
-        editor.focus();
-        editor.selectionStart = editor.selectionEnd = Math.max(lineStart, start - leadingSpaces);
-      });
-      return;
-    }
-
-    const blockStart = code.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
-    const selectionEnd = code[end - 1] === "\n" ? end - 1 : end;
-    const nextBreak = code.indexOf("\n", selectionEnd);
-    const blockEnd = nextBreak === -1 ? code.length : nextBreak;
-    const lines = code.slice(blockStart, blockEnd).split("\n");
-    let removed = 0;
-    const nextLines = lines.map((line) => {
-      if (direction === "in") return `    ${line}`;
-      const count = line.match(/^ {1,4}/)?.[0].length ?? 0;
-      removed += count;
-      return line.slice(count);
-    });
-    const nextCode = `${code.slice(0, blockStart)}${nextLines.join("\n")}${code.slice(blockEnd)}`;
-    const firstRemoved = direction === "out" ? (lines[0].match(/^ {1,4}/)?.[0].length ?? 0) : -4;
-    const nextStart = Math.max(blockStart, start - firstRemoved);
-    const nextEnd = direction === "in" ? end + (lines.length * 4) : Math.max(nextStart, end - removed);
-    updateRecord({ code: nextCode });
-    window.requestAnimationFrame(() => {
-      editor.focus();
-      editor.selectionStart = nextStart;
-      editor.selectionEnd = nextEnd;
-    });
+    applyEditorEdit(editForTab(
+      currentRecord.code,
+      editor.selectionStart,
+      editor.selectionEnd,
+      direction === "out",
+    ));
   }
 
   function runTests() {
@@ -918,22 +908,46 @@ export default function Home() {
   }
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing) return;
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       runTests();
       return;
     }
-    if (event.key !== "Tab") return;
-    event.preventDefault();
-    const editor = editorRef.current;
-    if (!editor) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    const editor = event.currentTarget;
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
-    const nextCode = `${currentRecord.code.slice(0, start)}    ${currentRecord.code.slice(end)}`;
-    updateRecord({ code: nextCode });
-    window.requestAnimationFrame(() => {
-      editor.selectionStart = editor.selectionEnd = start + 4;
-    });
+    let edit: EditorEdit | null = null;
+
+    if (event.key === "Enter") {
+      edit = editForEnter(currentRecord.code, start, end);
+    } else if (event.key === "Tab") {
+      edit = editForTab(currentRecord.code, start, end, event.shiftKey);
+    } else if (event.key === "Backspace") {
+      edit = editForBackspace(currentRecord.code, start, end);
+    } else {
+      edit = editForBracket(currentRecord.code, start, end, event.key);
+    }
+
+    if (!edit) return;
+    event.preventDefault();
+    applyEditorEdit(edit);
+  }
+
+  function handleEditorPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const insertedText = event.clipboardData.getData("text/plain");
+    if (!insertedText) return;
+    event.preventDefault();
+    const start = event.currentTarget.selectionStart;
+    const end = event.currentTarget.selectionEnd;
+    const caret = start + insertedText.length;
+    applyEditorEdit({
+      code: `${currentRecord.code.slice(0, start)}${insertedText}${currentRecord.code.slice(end)}`,
+      selectionStart: caret,
+      selectionEnd: caret,
+    }, { start, end, insertedText });
   }
 
   return (
@@ -1197,8 +1211,9 @@ export default function Home() {
               <textarea
                 ref={editorRef}
                 value={currentRecord.code}
-                onChange={(event) => updateRecord({ code: event.target.value })}
+                onChange={(event) => updateEditorCode(event.target.value)}
                 onKeyDown={handleEditorKeyDown}
+                onPaste={handleEditorPaste}
                 onScroll={(event) => {
                   if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = event.currentTarget.scrollTop;
                 }}
