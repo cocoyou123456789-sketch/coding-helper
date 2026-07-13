@@ -99,13 +99,15 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(workerSource, /Pyodide/);
   assert.match(workerSource, /build_list = make_list/);
   assert.match(serviceWorkerSource, /self\.registration\.scope/);
+  assert.match(serviceWorkerSource, /cacheAppAssetGraph/);
+  assert.match(serviceWorkerSource, /appAssetDependencies/);
   assert.equal(manifest.start_url, "./?source=pwa");
   assert.equal(manifest.scope, "./");
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.background_color, "#fff7f9");
   assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
-  assert.match(serviceWorkerSource, /2026-07-12-ios-v1/);
+  assert.match(serviceWorkerSource, /2026-07-13-lazy-v2/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));

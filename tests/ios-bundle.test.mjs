@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 const file = (path) => new URL(path, root);
 
 test("the iOS bundle is local, branded independently, and App Store ready", async () => {
-  const [html, nativeHtml, configSource, nativeConfig, worker, privacyManifest, packageSwift, infoPlist] = await Promise.all([
+  const [html, nativeHtml, configSource, nativeConfig, worker, privacyManifest, packageSwift, infoPlist, manifestSource] = await Promise.all([
     readFile(file("dist/client/index.html"), "utf8"),
     readFile(file("ios/App/App/public/index.html"), "utf8"),
     readFile(file("capacitor.config.ts"), "utf8"),
@@ -15,13 +15,26 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
     readFile(file("ios/App/App/PrivacyInfo.xcprivacy"), "utf8"),
     readFile(file("ios/App/CapApp-SPM/Package.swift"), "utf8"),
     readFile(file("ios/App/App/Info.plist"), "utf8"),
+    readFile(file("dist/client/.vite/manifest.json"), "utf8"),
   ]);
+  const manifest = JSON.parse(manifestSource);
 
   assert.match(html, /class="app-shell is-native-app"/);
   assert.match(html, /href="\/assets\//);
   assert.doesNotMatch(html, /\/coding-helper\//);
   assert.doesNotMatch(html, /LeetCode|力扣|HOT 100|Hot 100/);
   assert.equal(nativeHtml, html);
+  assert.doesNotMatch(nativeHtml, /leetcode-code-editor-[^"']+\.js/);
+  assert.doesNotMatch(nativeHtml, /course-notes-[^"']+\.js/);
+
+  for (const moduleId of ["app/leetcode-code-editor.tsx", "app/course-notes.tsx"]) {
+    const entry = manifest[moduleId];
+    assert.equal(entry?.isDynamicEntry, true);
+    await stat(file(`ios/App/App/public/${entry.file}`));
+    for (const stylesheet of entry.css ?? []) {
+      await stat(file(`ios/App/App/public/${stylesheet}`));
+    }
+  }
 
   assert.match(configSource, /webDir: "dist\/client"/);
   assert.match(configSource, /appId: "com\.coocylh\.tijiebu"/);

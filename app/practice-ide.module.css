@@ -310,6 +310,18 @@
   overflow: hidden;
 }
 
+.editorLoading {
+  align-items: center;
+  color: #bdbdbd;
+  display: flex;
+  font-size: var(--ide-body);
+  height: 100%;
+  justify-content: center;
+  min-height: 300px;
+  padding: 24px;
+  text-align: center;
+}
+
 .testConsole {
   background: #202020;
   border-top-color: #383838;

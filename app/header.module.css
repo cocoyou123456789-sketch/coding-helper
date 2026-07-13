@@ -1,0 +1,40 @@
+.responsiveHeader {
+  /* Shared header layout kept separate from deferred feature styles. */
+}
+
+.modeLoading {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: max(14px, 0.78rem);
+  justify-content: center;
+  min-height: min(62dvh, 620px);
+  padding: 40px 20px;
+  text-align: center;
+}
+
+@media (min-width: 761px) and (max-width: 1400px) {
+  .responsiveHeader {
+    gap: 8px 18px;
+    grid-template-areas:
+      "brand progress"
+      "actions actions";
+    grid-template-columns: max-content minmax(0, 1fr);
+    height: auto;
+    padding: 9px 0 10px;
+  }
+
+  .responsiveHeader > :global(.brand-block) {
+    grid-area: brand;
+  }
+
+  .responsiveHeader > :global(.header-progress) {
+    grid-area: progress;
+  }
+
+  .responsiveHeader > :global(.header-actions) {
+    flex-wrap: wrap;
+    grid-area: actions;
+    width: 100%;
+  }
+}

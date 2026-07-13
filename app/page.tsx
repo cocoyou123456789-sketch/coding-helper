@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   syncLineNotes,
   type LineNoteEdit,
 } from "./code-editor";
-import CourseNotes from "./course-notes";
-import courseStyles from "./course-notes.module.css";
 import { COURSE_NOTES_STORAGE_KEY } from "./course-notes-model";
-import LeetCodeCodeEditor, { type LeetCodeCodeEditorHandle } from "./leetcode-code-editor";
+import headerStyles from "./header.module.css";
+import type { LeetCodeCodeEditorHandle } from "./leetcode-code-editor";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import {
   clearStoredStudyData,
@@ -41,6 +40,11 @@ import {
   type StudyRecords,
 } from "./study-storage";
 import { nextTabIndex } from "./tab-navigation";
+
+const loadCourseNotes = () => import("./course-notes");
+const loadCodeEditor = () => import("./leetcode-code-editor");
+const CourseNotes = lazy(loadCourseNotes);
+const LeetCodeCodeEditor = lazy(loadCodeEditor);
 
 export const dynamic = "force-static";
 
@@ -600,6 +604,8 @@ export default function Home() {
         }
         const requestedMode = new URLSearchParams(window.location.search).get("mode");
         if (requestedMode === "path" || requestedMode === "workspace" || requestedMode === "course") {
+          if (requestedMode === "workspace") void loadCodeEditor();
+          if (requestedMode === "course") void loadCourseNotes();
           setAppMode(requestedMode);
           if (requestedMode === "workspace") setMobileWorkspaceTab("library");
         }
@@ -819,6 +825,7 @@ export default function Home() {
   }
 
   function openProblemFromPath(id: number) {
+    void loadCodeEditor();
     chooseProblem(id);
     setAppMode("workspace");
     setMobileWorkspaceTab("code");
@@ -841,6 +848,8 @@ export default function Home() {
 
   function showAppMode(nextMode: "path" | "workspace" | "course") {
     void playSelectionHaptic();
+    if (nextMode === "workspace") void loadCodeEditor();
+    if (nextMode === "course") void loadCourseNotes();
     if (nextMode !== "workspace") cancelActiveRun();
     setAppMode(nextMode);
     setShowProblemList(false);
@@ -1098,7 +1107,7 @@ export default function Home() {
 
   return (
     <main className={`app-shell ${nativeApp ? "is-native-app" : ""}`}>
-      <header className={`site-header ${courseStyles.courseNavigationHeader}`}>
+      <header className={`site-header ${headerStyles.responsiveHeader}`}>
         <div className="brand-block">
           <span className="brand-mark" aria-hidden="true">{"{ }"}</span>
           <div>
@@ -1120,8 +1129,8 @@ export default function Home() {
           <span className="save-state"><i />{autosaveLabel}</span>
           <nav className="app-mode-nav" aria-label={copy.appNavigation}>
             <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
-            <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
-            <button type="button" className={appMode === "course" ? "is-active" : ""} aria-current={appMode === "course" ? "page" : undefined} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
+            <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onMouseEnter={() => { void loadCodeEditor(); }} onFocus={() => { void loadCodeEditor(); }} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
+            <button type="button" className={appMode === "course" ? "is-active" : ""} aria-current={appMode === "course" ? "page" : undefined} onMouseEnter={() => { void loadCourseNotes(); }} onFocus={() => { void loadCourseNotes(); }} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
           </nav>
           <div className="language-toggle" role="group" aria-label="Language / 语言">
             <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} onClick={() => selectLanguage("zh")}>中文</button>
@@ -1182,7 +1191,9 @@ export default function Home() {
           onSprintBest={updateSprintBest}
         />
       ) : appMode === "course" ? (
-        <CourseNotes language={language} nativeApp={nativeApp} />
+        <Suspense fallback={<div className={headerStyles.modeLoading} role="status">{language === "zh" ? "正在打开课程笔记…" : "Opening course notes…"}</div>}>
+          <CourseNotes language={language} nativeApp={nativeApp} />
+        </Suspense>
       ) : (
         <div className={`workspace ${ideStyles.workspace}`}>
         <section className={ideStyles.topbar} aria-labelledby="practice-workspace-title">
@@ -1434,17 +1445,19 @@ export default function Home() {
           </div>
 
           <div className={`code-editor-wrap ${ideStyles.editorHost}`}>
-            <LeetCodeCodeEditor
-              key={currentProblem.id}
-              ref={codeEditorRef}
-              value={currentRecord.code}
-              onChange={updateEditorCode}
-              onRun={runTests}
-              fontSize={fontSize}
-              language={language}
-              ariaLabel={copy.editorLabel}
-              onCursorLineChange={setActiveCodeLine}
-            />
+            <Suspense fallback={<div className={ideStyles.editorLoading} role="status">{language === "zh" ? "正在准备代码编辑器…" : "Preparing code editor…"}</div>}>
+              <LeetCodeCodeEditor
+                key={currentProblem.id}
+                ref={codeEditorRef}
+                value={currentRecord.code}
+                onChange={updateEditorCode}
+                onRun={runTests}
+                fontSize={fontSize}
+                language={language}
+                ariaLabel={copy.editorLabel}
+                onCursorLineChange={setActiveCodeLine}
+              />
+            </Suspense>
           </div>
 
           <section className={`test-console test-${runState.phase} ${ideStyles.testConsole}`} aria-live="polite">

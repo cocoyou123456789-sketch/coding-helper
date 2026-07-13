@@ -12,6 +12,9 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   ]);
 
   assert.match(page, /LeetCodeCodeEditor/);
+  assert.match(page, /lazy\(loadCodeEditor\)/);
+  assert.match(page, /lazy\(loadCourseNotes\)/);
+  assert.match(page, /<Suspense/);
   assert.match(page, /去 LeetCode 提交/);
   assert.match(page, /setShowProblemList/);
   assert.match(page, /setShowNotesDrawer/);
@@ -46,5 +49,6 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.errorCoach/);
   assert.match(styles, /\.lineNoteNavigator/);
   assert.match(styles, /\.navigatorActive/);
+  assert.match(styles, /\.editorLoading/);
   assert.match(styles, /@media \(max-width: 760px\)/);
 });

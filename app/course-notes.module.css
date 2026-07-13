@@ -10,10 +10,6 @@
   color: var(--course-ink);
 }
 
-.courseNavigationHeader {
-  /* The third top-level destination needs a little more room on mid-size screens. */
-}
-
 .shell button,
 .shell input,
 .shell select,
@@ -634,32 +630,6 @@
   }
 
   .voiceControls button {
-    width: 100%;
-  }
-}
-
-@media (min-width: 761px) and (max-width: 1400px) {
-  .courseNavigationHeader {
-    gap: 8px 18px;
-    grid-template-areas:
-      "brand progress"
-      "actions actions";
-    grid-template-columns: max-content minmax(0, 1fr);
-    height: auto;
-    padding: 9px 0 10px;
-  }
-
-  .courseNavigationHeader > :global(.brand-block) {
-    grid-area: brand;
-  }
-
-  .courseNavigationHeader > :global(.header-progress) {
-    grid-area: progress;
-  }
-
-  .courseNavigationHeader > :global(.header-actions) {
-    flex-wrap: wrap;
-    grid-area: actions;
     width: 100%;
   }
 }

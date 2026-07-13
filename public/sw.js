@@ -1,9 +1,10 @@
 /* global self, caches, fetch, URL, Response */
 
-const CACHE_NAME = "algoquest-pwa-2026-07-12-ios-v1";
-const RUNTIME_CACHE = "algoquest-runtime-2026-07-12-ios-v1";
+const CACHE_NAME = "algoquest-pwa-2026-07-13-lazy-v2";
+const RUNTIME_CACHE = "algoquest-runtime-2026-07-13-lazy-v2";
 const SCOPE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 const ROOT_URL = `${SCOPE_PATH}/`;
+const MAX_APP_ASSETS = 200;
 
 function appUrl(path = "") {
   return `${ROOT_URL}${path}`;
@@ -18,6 +19,49 @@ async function putIfCacheable(cache, request, response) {
     }
   }
   return response;
+}
+
+function appAssetDependencies(source, baseUrl) {
+  const dependencies = [];
+  const pattern = /["'`]([^"'`]+\.(?:js|css))(?:\?[^"'`]*)?["'`]/g;
+  for (const match of source.matchAll(pattern)) {
+    try {
+      const value = match[1];
+      const url = value.startsWith("assets/")
+        ? new URL(appUrl(value), self.location.origin)
+        : new URL(value, baseUrl);
+      if (url.origin === self.location.origin && url.pathname.startsWith(`${ROOT_URL}assets/`)) {
+        dependencies.push(url.href);
+      }
+    } catch {
+      // A string that merely looks like a filename is not necessarily a URL.
+    }
+  }
+  return dependencies;
+}
+
+async function cacheAppAssetGraph(cache, initialUrls) {
+  const pending = [...new Set(initialUrls)];
+  const visited = new Set();
+
+  while (pending.length && visited.size < MAX_APP_ASSETS) {
+    const url = pending.shift();
+    if (!url || visited.has(url)) continue;
+    visited.add(url);
+    try {
+      const response = await fetch(url, { cache: "reload" });
+      if (!response.ok) continue;
+      const source = new URL(url).pathname.endsWith(".js")
+        ? await response.clone().text()
+        : "";
+      await putIfCacheable(cache, url, response);
+      for (const dependency of appAssetDependencies(source, url)) {
+        if (!visited.has(dependency)) pending.push(dependency);
+      }
+    } catch {
+      // Runtime caching can fill an individual asset after a weak first install.
+    }
+  }
 }
 
 async function cacheAppShell() {
@@ -47,10 +91,7 @@ async function cacheAppShell() {
       .map((value) => new URL(value, self.location.origin))
       .filter((url) => url.origin === self.location.origin && url.pathname.startsWith(ROOT_URL))
       .map((url) => url.href);
-    await Promise.allSettled([...new Set(assetUrls)].map(async (url) => {
-      const response = await fetch(url, { cache: "reload" });
-      await putIfCacheable(cache, url, response);
-    }));
+    await cacheAppAssetGraph(cache, assetUrls);
   } catch {
     // A first install may happen on a weak connection; runtime caching will fill any missing assets later.
   }
