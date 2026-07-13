@@ -18,6 +18,9 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /messageBelongsToRun/);
   assert.match(page, /activeRunRef/);
   assert.match(page, /cancelActiveRun/);
+  assert.match(page, /noteLineMode/);
+  assert.match(page, /noteLineIndexes/);
+  assert.match(page, /onCursorLineChange/);
   assert.doesNotMatch(page, /if \(allPassed\) updateRecord\(\{ status: "solved" \}\)/);
   assert.doesNotMatch(page, /className="code-field"/);
 
@@ -27,10 +30,14 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(editor, /snippetCompletion/);
   assert.match(editor, /Mod-Enter/);
   assert.match(editor, /indentWithTab/);
+  assert.match(editor, /onCursorLineChangeRef/);
+  assert.match(editor, /update\.selectionSet/);
 
   assert.match(styles, /grid-template-columns: minmax\(330px, 42%\)/);
   assert.match(styles, /\.notesDrawer/);
   assert.match(styles, /--ide-caption: max\(12px/);
   assert.match(styles, /\.errorCoach/);
+  assert.match(styles, /\.lineNoteNavigator/);
+  assert.match(styles, /\.navigatorActive/);
   assert.match(styles, /@media \(max-width: 760px\)/);
 });

@@ -471,6 +471,71 @@
   font-size: max(16px, var(--ide-body));
 }
 
+.lineNoteNavigator {
+  align-items: center;
+  background: #fff8fa;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 9px 12px;
+}
+
+.lineNoteNavigator > div:first-child {
+  min-width: 0;
+}
+
+.lineNoteNavigator strong,
+.lineNoteNavigator span {
+  display: block;
+}
+
+.lineNoteNavigator strong {
+  color: var(--ink);
+  font-size: var(--ide-small);
+}
+
+.lineNoteNavigator span {
+  color: var(--muted);
+  font-size: var(--ide-caption);
+  margin-top: 2px;
+}
+
+.lineNoteNavigator > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.lineNoteNavigator button {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: var(--ide-caption);
+  font-weight: 750;
+  min-height: 34px;
+  padding: 0 8px;
+}
+
+.lineNoteNavigator button:hover:not(:disabled) {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.lineNoteNavigator button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lineNoteNavigator .navigatorActive,
+.lineNoteNavigator .navigatorActive:hover:not(:disabled) {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
 @media (max-width: 1120px) and (min-width: 761px) {
   .workspace {
     height: calc(100dvh - 137px);
@@ -589,6 +654,20 @@
 
   .languageWrap::after {
     top: 12px;
+  }
+
+  .lineNoteNavigator {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lineNoteNavigator > div:last-child {
+    display: grid;
+    grid-template-columns: 44px 44px 1fr 1fr;
+  }
+
+  .lineNoteNavigator button {
+    min-height: 44px;
   }
 }
 

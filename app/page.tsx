@@ -30,21 +30,18 @@ import { problems, type Problem } from "./problems";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
 import { beginnerPythonErrorHint, messageBelongsToRun, solutionErrorLine } from "./run-session";
+import {
+  STUDY_STORAGE_VERSION,
+  normalizeLearningProfile,
+  normalizeSavedStudy,
+  normalizeStudyRecord,
+  parseStoredJson,
+  type LearningStatus,
+  type StudyRecord,
+  type StudyRecords,
+} from "./study-storage";
 
 export const dynamic = "force-static";
-
-type LearningStatus = "todo" | "learning" | "solved" | "review";
-
-type StudyRecord = {
-  code: string;
-  lineNotes: string[];
-  thinking: string;
-  mistakes: string;
-  review: string;
-  status: LearningStatus;
-};
-
-type StudyRecords = Record<number, StudyRecord>;
 
 type WorkerTestResult = {
   index: number;
@@ -374,21 +371,6 @@ const difficultyOrder: Record<Problem["difficulty"], number> = {
   困难: 2,
 };
 
-function blankRecord(problem: Problem): StudyRecord {
-  return {
-    code: problem.starterCode,
-    lineNotes: [],
-    thinking: "",
-    mistakes: "",
-    review: "",
-    status: "todo",
-  };
-}
-
-function mergeRecord(problem: Problem, record?: Partial<StudyRecord>): StudyRecord {
-  return { ...blankRecord(problem), ...record };
-}
-
 function explainLine(line: string, language: Language): string {
   const code = line.trim();
   if (language === "en") {
@@ -489,6 +471,8 @@ export default function Home() {
   const [topic, setTopic] = useState("all");
   const [difficultyFilter, setDifficultyFilter] = useState<"all" | Problem["difficulty"]>("简单");
   const [noteTab, setNoteTab] = useState<"line" | "review">("line");
+  const [noteLineMode, setNoteLineMode] = useState<"current" | "all">("current");
+  const [activeCodeLine, setActiveCodeLine] = useState(1);
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
   const [hydrated, setHydrated] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -530,9 +514,15 @@ export default function Home() {
     () => displayProblems.find((problem) => problem.id === selectedId) ?? displayProblems[0],
     [displayProblems, selectedId],
   );
-  const currentRecord = mergeRecord(currentProblem, records[currentProblem.id]);
+  const currentRecord = normalizeStudyRecord(currentProblem, records[currentProblem.id]);
   const currentDetail = localizeDetail(currentProblem, language);
   const codeLines = currentRecord.code.split("\n");
+  const safeActiveCodeLine = Math.min(Math.max(1, activeCodeLine), codeLines.length);
+  const noteLineIndexes = noteLineMode === "current"
+    ? [safeActiveCodeLine - 1]
+    : codeLines.map((_, index) => index);
+  const noteEligibleLines = codeLines.filter((line) => line.trim()).length;
+  const explainedLines = codeLines.filter((line, index) => line.trim() && currentRecord.lineNotes[index]?.trim()).length;
   const allQuickTestsPassed = runState.phase === "done"
     && runState.results.length > 0
     && runState.results.every((result) => result.passed);
@@ -589,18 +579,16 @@ export default function Home() {
           if (requestedMode === "workspace") setMobileWorkspaceTab("library");
         }
         if (saved) {
-          const parsed = JSON.parse(saved) as { records?: StudyRecords; selectedId?: number };
-          if (parsed.records) setRecords(parsed.records);
-          if (parsed.selectedId && problems.some((problem) => problem.id === parsed.selectedId)) {
-            setSelectedId(parsed.selectedId);
-          }
+          const normalized = normalizeSavedStudy(parseStoredJson(saved), problems);
+          setRecords(normalized.records);
+          if (normalized.selectedId) setSelectedId(normalized.selectedId);
         }
         const savedFontSize = Number(savedFontSizeValue);
         if (Number.isInteger(savedFontSize) && savedFontSize >= MIN_FONT_SIZE && savedFontSize <= MAX_FONT_SIZE) {
           setFontSize(savedFontSize);
         }
         if (savedProfile) {
-          const loaded = { ...EMPTY_PROFILE, ...JSON.parse(savedProfile) } as LearningProfile;
+          const loaded = normalizeLearningProfile(parseStoredJson(savedProfile));
           if (loaded.todayDate !== localDateKey()) {
             loaded.todayXp = 0;
             if (loaded.todayDate !== yesterdayKey()) loaded.streak = 0;
@@ -624,7 +612,7 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated) return;
     const timer = window.setTimeout(() => {
-      void setStoredValue(STORAGE_KEY, JSON.stringify({ records, selectedId }));
+      void setStoredValue(STORAGE_KEY, JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId }));
     }, 250);
     return () => window.clearTimeout(timer);
   }, [hydrated, records, selectedId]);
@@ -696,7 +684,7 @@ export default function Home() {
     setRecords((previous) => ({
       ...previous,
       [currentProblem.id]: {
-        ...mergeRecord(currentProblem, previous[currentProblem.id]),
+        ...normalizeStudyRecord(currentProblem, previous[currentProblem.id]),
         ...patch,
       },
     }));
@@ -711,7 +699,7 @@ export default function Home() {
       return {
         ...previous,
         [id]: {
-          ...mergeRecord(problem, previous[id]),
+          ...normalizeStudyRecord(problem, previous[id]),
           status: nextStatus,
         },
       };
@@ -792,6 +780,8 @@ export default function Home() {
     setSelectedId(id);
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setNoteTab("line");
+    setNoteLineMode("current");
+    setActiveCodeLine(1);
     setShowStatement(true);
     closeProblemListDrawer(false);
     setMobileWorkspaceTab("code");
@@ -890,6 +880,12 @@ export default function Home() {
     updateRecord({ lineNotes: next });
   }
 
+  function selectCodeLine(lineNumber: number) {
+    const nextLine = Math.min(Math.max(1, lineNumber), codeLines.length);
+    setActiveCodeLine(nextLine);
+    window.requestAnimationFrame(() => codeEditorRef.current?.revealLine(nextLine));
+  }
+
   function fillLineNotes() {
     updateRecord({
       lineNotes: codeLines.map((line, index) => currentRecord.lineNotes[index] || explainLine(line, language)),
@@ -907,7 +903,7 @@ export default function Home() {
     cancelActiveRun();
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setRecords((previous) => {
-      const previousRecord = mergeRecord(currentProblem, previous[currentProblem.id]);
+      const previousRecord = normalizeStudyRecord(currentProblem, previous[currentProblem.id]);
       return {
         ...previous,
         [currentProblem.id]: {
@@ -1376,6 +1372,7 @@ export default function Home() {
               fontSize={fontSize}
               language={language}
               ariaLabel={copy.editorLabel}
+              onCursorLineChange={setActiveCodeLine}
             />
           </div>
 
@@ -1470,19 +1467,62 @@ export default function Home() {
                 <p>{copy.linePrompt}<strong>{copy.lineQuestions}</strong></p>
                 <button type="button" onClick={fillLineNotes}>{copy.fillNotes}</button>
               </div>
+              <div className={ideStyles.lineNoteNavigator}>
+                <div>
+                  <strong>{language === "zh" ? `当前第 ${safeActiveCodeLine} 行` : `Current line ${safeActiveCodeLine}`}</strong>
+                  <span>{language === "zh" ? `已解释 ${explainedLines} / ${noteEligibleLines} 行` : `${explainedLines} / ${noteEligibleLines} lines explained`}</span>
+                </div>
+                <div role="group" aria-label={language === "zh" ? "选择要解释的代码行" : "Choose code line to explain"}>
+                  <button
+                    type="button"
+                    aria-label={language === "zh" ? "上一行" : "Previous line"}
+                    disabled={safeActiveCodeLine <= 1}
+                    onClick={() => selectCodeLine(safeActiveCodeLine - 1)}
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={language === "zh" ? "下一行" : "Next line"}
+                    disabled={safeActiveCodeLine >= codeLines.length}
+                    onClick={() => selectCodeLine(safeActiveCodeLine + 1)}
+                  >
+                    →
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={noteLineMode === "current"}
+                    className={noteLineMode === "current" ? ideStyles.navigatorActive : ""}
+                    onClick={() => setNoteLineMode("current")}
+                  >
+                    {language === "zh" ? "当前行" : "Current"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={noteLineMode === "all"}
+                    className={noteLineMode === "all" ? ideStyles.navigatorActive : ""}
+                    onClick={() => setNoteLineMode("all")}
+                  >
+                    {language === "zh" ? "全部行" : "All"}
+                  </button>
+                </div>
+              </div>
               <div className="line-note-list">
-                {codeLines.map((line, index) => (
-                  <label className="line-note-card" key={`${index}-${line}`}>
-                    <span className="note-line-number">{String(index + 1).padStart(2, "0")}</span>
-                    <code>{line || copy.blankLine}</code>
-                    <textarea
-                      value={currentRecord.lineNotes[index] ?? ""}
-                      onChange={(event) => updateLineNote(index, event.target.value)}
-                      placeholder={explainLine(line, language)}
-                      rows={2}
-                    />
-                  </label>
-                ))}
+                {noteLineIndexes.map((index) => {
+                  const line = codeLines[index];
+                  return (
+                    <label className="line-note-card" key={index}>
+                      <span className="note-line-number">{String(index + 1).padStart(2, "0")}</span>
+                      <code>{line || copy.blankLine}</code>
+                      <textarea
+                        value={currentRecord.lineNotes[index] ?? ""}
+                        onChange={(event) => updateLineNote(index, event.target.value)}
+                        placeholder={explainLine(line, language)}
+                        rows={2}
+                      />
+                    </label>
+                  );
+                })}
               </div>
             </div>
           ) : (

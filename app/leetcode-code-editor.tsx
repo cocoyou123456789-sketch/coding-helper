@@ -43,6 +43,7 @@ export interface LeetCodeCodeEditorProps {
   fontSize: number;
   language: "zh" | "en";
   ariaLabel: string;
+  onCursorLineChange?: (lineNumber: number) => void;
 }
 
 const externalDocumentUpdate = Annotation.define<boolean>();
@@ -297,7 +298,7 @@ export const LeetCodeCodeEditor = forwardRef<
   LeetCodeCodeEditorHandle,
   LeetCodeCodeEditorProps
 >(function LeetCodeCodeEditor(
-  { value, onChange, onRun, fontSize, language, ariaLabel },
+  { value, onChange, onRun, fontSize, language, ariaLabel, onCursorLineChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -308,12 +309,15 @@ export const LeetCodeCodeEditor = forwardRef<
   const initialAriaLabelRef = useRef(ariaLabel);
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
+  const onCursorLineChangeRef = useRef(onCursorLineChange);
+  const lastCursorLineRef = useRef(1);
   const languageRef = useRef(language);
   const fontSizeCompartmentRef = useRef(new Compartment());
   const accessibilityCompartmentRef = useRef(new Compartment());
 
   onChangeRef.current = onChange;
   onRunRef.current = onRun;
+  onCursorLineChangeRef.current = onCursorLineChange;
   languageRef.current = language;
 
   const completionSource = useMemo<CompletionSource>(() => (context) => {
@@ -384,6 +388,13 @@ export const LeetCodeCodeEditor = forwardRef<
           indentWithTab,
         ]),
         EditorView.updateListener.of((update) => {
+          if (update.selectionSet || update.docChanged) {
+            const lineNumber = update.state.doc.lineAt(update.state.selection.main.head).number;
+            if (lineNumber !== lastCursorLineRef.current) {
+              lastCursorLineRef.current = lineNumber;
+              onCursorLineChangeRef.current?.(lineNumber);
+            }
+          }
           if (!update.docChanged) return;
           if (update.transactions.some((transaction) => transaction.annotation(externalDocumentUpdate))) {
             return;
@@ -395,6 +406,8 @@ export const LeetCodeCodeEditor = forwardRef<
 
     const view = new EditorView({ state, parent: hostRef.current });
     viewRef.current = view;
+    lastCursorLineRef.current = view.state.doc.lineAt(view.state.selection.main.head).number;
+    onCursorLineChangeRef.current?.(lastCursorLineRef.current);
 
     return () => {
       viewRef.current = null;
