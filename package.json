@@ -17,7 +17,7 @@
     "test:course": "node --experimental-strip-types --test tests/course-notes.test.mjs",
     "test:dialogs": "node --test tests/dialog-focus.test.mjs",
     "test:editor": "node --experimental-strip-types --test tests/code-editor.test.mjs",
-    "test:ide": "node --test tests/practice-ide.test.mjs",
+    "test:ide": "node --experimental-strip-types --test tests/practice-completion.test.mjs tests/practice-ide.test.mjs",
     "test:navigation": "node --experimental-strip-types --test tests/navigation-state.test.mjs",
     "test:runner": "node --experimental-strip-types --test tests/run-session.test.mjs",
     "test:storage": "node --experimental-strip-types --test tests/study-storage.test.mjs",

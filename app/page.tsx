@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import backupStyles from "./backup-settings.module.css";
 import {
   syncLineNotes,
@@ -43,6 +43,7 @@ import {
 } from "./native-app";
 import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
+import { nextRecommendedProblemId, practiceCompletionProgress, practiceKeyLineIndexes } from "./practice-completion";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
 import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, solutionErrorLine, starterPlaceholderLine } from "./run-session";
@@ -232,8 +233,29 @@ const pageCopy = {
     resetCode: "恢复初始代码",
     run: "运行测试",
     running: "运行中…",
-    nextReview: "测试通过，下一步：解释关键代码 →",
-    markMastered: "完成本题，标记为已掌握",
+    nextReview: "本机测试通过，完成 3 步巩固 →",
+    completionTitle: "本机测试通过，别急着结束",
+    completionBody: "随附用例通过不等于力扣 Accepted。写下真正理解的部分，再去正式提交。",
+    nativeCompletionBody: "随附用例通过只是第一步。写下真正理解的部分，再完成正式题库验证。",
+    completionNotes: (done: number, required: number) => `解释关键代码 ${Math.min(done, required)} / ${required}`,
+    completionSignal: "写 1 条“下次怎么认出来”",
+    completionSubmit: "去力扣正式提交并确认 Accepted",
+    openOfficialProblem: "打开正式题目",
+    nativeCompletionSubmit: "完成正式题库验证",
+    goExplain: "去解释",
+    goWriteSignal: "去填写",
+    continueReflection: "先完成复盘",
+    reflectionReady: "复盘已完成，可以确认正式结果。",
+    reflectionNeeded: "先完成前两项；每项只需要写一小段。",
+    confirmAccepted: "我已在力扣 Accepted，标记掌握",
+    confirmValidated: "我已通过正式验证，标记掌握",
+    masteredTitle: "这道题真正完成了！",
+    masteredBody: "本题已标记为掌握。请留意旁边的保存状态；接着趁思路还热，练下一道合适的题。",
+    nextRecommended: (id: number, title: string) => `推荐下一题：${id}. ${title}`,
+    practiceNext: "练下一题",
+    backToStudyHome: "回学习首页",
+    allMastered: "当前题库都已掌握，可以回首页选择复习。",
+    statusHelp: "“已掌握”由上方完成流程自动点亮；掌握后如需重学，请先标为待复习。",
     editorLabel: "Python 代码编辑器",
     quickTest: "快速测试",
     testHelp: "检查示例是否通过；最终结果仍以力扣提交为准。",
@@ -254,7 +276,7 @@ const pageCopy = {
     reflection: "思路与复盘",
     linePrompt: "写的每一行都是什么意思？",
     lineQuestions: "用自己的话说明：这一行做了什么，为什么这样写。",
-    fillNotes: "一键补齐基础解释",
+    fillNotes: "插入基础解释（请改成自己的话）",
     blankLine: "（空行）",
     thinkingTitle: "我的解题思路",
     thinkingHelp: "不用写术语，先用自己的话说明步骤。",
@@ -428,8 +450,29 @@ const pageCopy = {
     resetCode: "Reset starter code",
     run: "Run tests",
     running: "Running…",
-    nextReview: "Tests passed — next: explain key lines →",
-    markMastered: "Finish and mark as mastered",
+    nextReview: "Quick tests passed — finish 3 learning steps →",
+    completionTitle: "Quick tests passed — do not stop here",
+    completionBody: "Passing the included cases is not a LeetCode Accepted result. Capture what you understand, then submit to the official judge.",
+    nativeCompletionBody: "Passing the included cases is only step one. Capture what you understand, then verify with the full problem set.",
+    completionNotes: (done: number, required: number) => `Explain key code ${Math.min(done, required)} / ${required}`,
+    completionSignal: "Write one clue for recognizing this pattern",
+    completionSubmit: "Submit on LeetCode and confirm Accepted",
+    openOfficialProblem: "Open the official problem",
+    nativeCompletionSubmit: "Verify with the full problem set",
+    goExplain: "Explain lines",
+    goWriteSignal: "Write the clue",
+    continueReflection: "Finish the reflection first",
+    reflectionReady: "Reflection complete — confirm the official result when ready.",
+    reflectionNeeded: "Finish the first two items; each needs only a short note.",
+    confirmAccepted: "I got Accepted on LeetCode — mark mastered",
+    confirmValidated: "I passed the full verification — mark mastered",
+    masteredTitle: "You truly finished this problem!",
+    masteredBody: "This problem is marked as mastered. Check the save status beside it, then practice another suitable problem while the idea is fresh.",
+    nextRecommended: (id: number, title: string) => `Recommended next: ${id}. ${title}`,
+    practiceNext: "Practice next problem",
+    backToStudyHome: "Back to study home",
+    allMastered: "Every problem in this set is mastered. Return home to choose a review.",
+    statusHelp: "Mastered is unlocked by the completion steps above. To relearn it later, mark it for review first.",
     editorLabel: "Python code editor",
     quickTest: "Quick tests",
     testHelp: "Check the examples here; LeetCode remains the final judge.",
@@ -450,7 +493,7 @@ const pageCopy = {
     reflection: "Plan & review",
     linePrompt: "What does each line of your code mean?",
     lineQuestions: "Explain in your own words what this line does and why it is here.",
-    fillNotes: "Add starter explanations",
+    fillNotes: "Insert basic explanations (rewrite them in your own words)",
     blankLine: "(blank line)",
     thinkingTitle: "My approach",
     thinkingHelp: "Use your own words; technical terms are optional.",
@@ -718,6 +761,7 @@ export default function Home() {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runSequenceRef = useRef(0);
   const runFeedbackFrameRef = useRef<number | null>(null);
+  const workspaceFocusFrameRef = useRef<number | null>(null);
   const runFeedbackGenerationRef = useRef(0);
   const saveSequenceRef = useRef(0);
   const dataOperationRef = useRef(false);
@@ -730,7 +774,13 @@ export default function Home() {
   const queuedLanguageValueRef = useRef<string | null>(null);
   const activeRunRef = useRef<{ id: string; cleanup: () => void } | null>(null);
   const codeEditorRef = useRef<LeetCodeCodeEditorHandle | null>(null);
+  const studyHomeRef = useRef<HTMLDivElement | null>(null);
   const problemHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const libraryHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const notesHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const lineNotesPanelRef = useRef<HTMLDivElement | null>(null);
+  const recognitionSignalRef = useRef<HTMLTextAreaElement | null>(null);
+  const completionStatusRef = useRef<HTMLDivElement | null>(null);
   const testConsoleRef = useRef<HTMLElement | null>(null);
   const problemMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const notesButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -775,10 +825,32 @@ export default function Home() {
     ? [safeActiveCodeLine - 1]
     : codeLines.map((_, index) => index);
   const noteEligibleLines = codeLines.filter((line) => line.trim()).length;
-  const explainedLines = codeLines.filter((line, index) => line.trim() && currentRecord.lineNotes[index]?.trim()).length;
+  const suggestedLineNotes = codeLines.map((line) => explainLine(line, language));
+  const generatedLineNoteAlternatives = codeLines.map((line) => [explainLine(line, "zh"), explainLine(line, "en")]);
+  const explainedLines = codeLines.filter((line, index) => {
+    const note = currentRecord.lineNotes[index]?.trim();
+    return line.trim() && note && !generatedLineNoteAlternatives[index]?.some((suggestion) => suggestion.trim() === note);
+  }).length;
   const allQuickTestsPassed = runState.phase === "done"
     && runState.results.length > 0
     && runState.results.every((result) => result.passed);
+  const keyLineIndexes = practiceKeyLineIndexes(currentRecord.code);
+  const completionProgress = practiceCompletionProgress(
+    currentRecord.code,
+    currentRecord.lineNotes,
+    currentRecord.review,
+    generatedLineNoteAlternatives,
+  );
+  const nextProblemId = nextRecommendedProblemId(displayProblems, currentProblem.id, records);
+  const nextPracticeProblem = nextProblemId
+    ? displayProblems.find((problem) => problem.id === nextProblemId)
+    : undefined;
+  const noteSaveLabel = staleStudyData
+    ? copy.staleTitle
+    : storageReadOnly
+      ? copy.readOnlyTitle
+      : saveState === "saving" ? copy.saving : saveState === "error" ? copy.saveFailed : copy.saved;
+  const noteSaveIsError = staleStudyData || storageReadOnly || saveState === "error";
   const firstFailedResult = runState.results.find((result) => !result.passed);
   const runErrorForCoaching = runState.phase === "error"
     ? runState.message
@@ -1050,6 +1122,7 @@ export default function Home() {
       workerRef.current?.terminate();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (runFeedbackFrameRef.current !== null) window.cancelAnimationFrame(runFeedbackFrameRef.current);
+      if (workspaceFocusFrameRef.current !== null) window.cancelAnimationFrame(workspaceFocusFrameRef.current);
     };
   }, []);
 
@@ -1099,7 +1172,16 @@ export default function Home() {
     return () => compactWorkspace.removeEventListener("change", closeDesktopDrawersOnCompactLayout);
   }, []);
 
+  function markStudyDirty() {
+    if (hydrated && !dataOperationRef.current && !studyEditingBlocked) setSaveState("saving");
+  }
+
   function updateRecord(patch: Partial<StudyRecord>) {
+    const changesRecord = (Object.keys(patch) as (keyof StudyRecord)[]).some((key) => (
+      JSON.stringify(currentRecord[key]) !== JSON.stringify(patch[key])
+    ));
+    if (!changesRecord) return;
+    markStudyDirty();
     setRecords((previous) => ({
       ...previous,
       [currentProblem.id]: {
@@ -1112,9 +1194,13 @@ export default function Home() {
   function updateProblemStatus(id: number, status: LearningStatus) {
     const problem = displayProblems.find((item) => item.id === id);
     if (!problem) return;
+    const previousStatus = normalizeStudyRecord(problem, records[id]).status;
+    const requestedStatus = previousStatus === "solved" && status !== "review" ? "solved" : status;
+    if (previousStatus === requestedStatus) return;
+    markStudyDirty();
     setRecords((previous) => {
-      const previousStatus = previous[id]?.status;
-      const nextStatus = previousStatus === "solved" && status !== "review" ? "solved" : status;
+      const normalizedStatus = normalizeStudyRecord(problem, previous[id]).status;
+      const nextStatus = normalizedStatus === "solved" && status !== "review" ? "solved" : status;
       return {
         ...previous,
         [id]: {
@@ -1178,9 +1264,20 @@ export default function Home() {
     }
   }
 
+  function focusMobileWorkspaceHeading<T extends HTMLElement>(target: RefObject<T | null>) {
+    if (!window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) return;
+    if (workspaceFocusFrameRef.current !== null) window.cancelAnimationFrame(workspaceFocusFrameRef.current);
+    workspaceFocusFrameRef.current = window.requestAnimationFrame(() => {
+      workspaceFocusFrameRef.current = null;
+      target.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      target.current?.focus({ preventScroll: true });
+    });
+  }
+
   function openProblemListDrawer() {
     if (window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) {
       selectMobileWorkspacePane("library");
+      focusMobileWorkspaceHeading(libraryHeadingRef);
       return;
     }
     setShowNotesDrawer(false);
@@ -1196,6 +1293,7 @@ export default function Home() {
   function openNotesDrawer() {
     if (window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) {
       selectMobileWorkspacePane("notes");
+      focusMobileWorkspaceHeading(notesHeadingRef);
       return;
     }
     setShowProblemList(false);
@@ -1206,6 +1304,11 @@ export default function Home() {
   function closeNotesDrawer(restoreFocus = true) {
     setShowNotesDrawer(false);
     if (restoreFocus) window.requestAnimationFrame(() => notesButtonRef.current?.focus());
+  }
+
+  function showCodeFromNotes() {
+    selectMobileWorkspacePane("code");
+    focusMobileWorkspaceHeading(problemHeadingRef);
   }
 
   function openProblemFromPath(id: number) {
@@ -1640,8 +1743,39 @@ export default function Home() {
 
   function fillLineNotes() {
     updateRecord({
-      lineNotes: codeLines.map((line, index) => currentRecord.lineNotes[index] || explainLine(line, language)),
+      lineNotes: suggestedLineNotes.map((suggestion, index) => currentRecord.lineNotes[index] || suggestion),
     });
+  }
+
+  function focusLineReflection() {
+    setNoteTab("line");
+    setNoteLineMode("all");
+    openNotesDrawer();
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const textareas = keyLineIndexes
+        .map((index) => lineNotesPanelRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-line-index="${index}"]`))
+        .filter((textarea): textarea is HTMLTextAreaElement => Boolean(textarea));
+      const unfinished = textareas.find((textarea) => {
+        const index = Number(textarea.dataset.lineIndex);
+        const note = textarea.value.trim();
+        return !note || generatedLineNoteAlternatives[index]?.some((suggestion) => suggestion.trim() === note);
+      });
+      (unfinished ?? textareas[0])?.focus();
+    }));
+  }
+
+  function focusRecognitionSignal() {
+    setNoteTab("review");
+    openNotesDrawer();
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => recognitionSignalRef.current?.focus()));
+  }
+
+  function continueCompletionReflection() {
+    if (completionProgress.explainedKeyLines < completionProgress.requiredKeyLines) {
+      focusLineReflection();
+      return;
+    }
+    focusRecognitionSignal();
   }
 
   function resetCode() {
@@ -1656,12 +1790,35 @@ export default function Home() {
   }
 
   function markCurrentProblemSolved() {
+    if (!allQuickTestsPassed || !completionProgress.notesReady || currentRecord.status === "solved") return;
     updateRecord({ status: "solved" });
     void playTestHaptic(true);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => completionStatusRef.current?.focus()));
+  }
+
+  function openNextPracticeProblem() {
+    if (!nextPracticeProblem) return;
+    closeNotesDrawer(false);
+    chooseProblem(nextPracticeProblem.id);
+  }
+
+  function returnToStudyHome() {
+    closeNotesDrawer(false);
+    showAppMode("path");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => studyHomeRef.current?.focus()));
+  }
+
+  function updateCurrentPracticeStatus(status: LearningStatus) {
+    if (status === "solved" && currentRecord.status !== "solved") return;
+    if (currentRecord.status === "solved" && status !== "solved" && status !== "review") return;
+    updateRecord({ status });
   }
 
   function updateEditorCode(nextCode: string, lineNoteEdit?: LineNoteEdit) {
+    const nextLineNotes = syncLineNotes(currentRecord.code, nextCode, currentRecord.lineNotes, lineNoteEdit);
+    if (nextCode === currentRecord.code && JSON.stringify(nextLineNotes) === JSON.stringify(currentRecord.lineNotes)) return;
     cancelActiveRun();
+    markStudyDirty();
     setStarterPromptLine(null);
     setCoreIdeaLocation((current) => current === "problem" ? current : null);
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
@@ -1926,19 +2083,21 @@ export default function Home() {
       {hydrated && !studyEditingBlocked && (
       <div>
       {appMode === "path" ? (
-        <LearningHub
-          problems={displayProblems}
-          records={records}
-          profile={profile}
-          language={language}
-          difficultyFilter={difficultyFilter}
-          onDifficultyChange={setDifficultyFilter}
-          onEarnXp={earnXp}
-          onFinishLesson={finishLearningLesson}
-          onMarkStatus={updateProblemStatus}
-          onOpenProblem={openProblemFromPath}
-          onSprintBest={updateSprintBest}
-        />
+        <div ref={studyHomeRef} tabIndex={-1} role="region" aria-label={copy.learningPath}>
+          <LearningHub
+            problems={displayProblems}
+            records={records}
+            profile={profile}
+            language={language}
+            difficultyFilter={difficultyFilter}
+            onDifficultyChange={setDifficultyFilter}
+            onEarnXp={earnXp}
+            onFinishLesson={finishLearningLesson}
+            onMarkStatus={updateProblemStatus}
+            onOpenProblem={openProblemFromPath}
+            onSprintBest={updateSprintBest}
+          />
+        </div>
       ) : appMode === "course" ? (
         <Suspense fallback={<div className={headerStyles.modeLoading} role="status">{language === "zh" ? "正在打开课程笔记…" : "Opening course notes…"}</div>}>
           <CourseNotes language={language} nativeApp={nativeApp} />
@@ -2026,7 +2185,7 @@ export default function Home() {
           <div className="library-head">
             <div className="section-kicker">LEARNING MAP</div>
             <div className="library-title-row">
-              <h1>{libraryTitle}</h1>
+              <h1 ref={libraryHeadingRef} tabIndex={-1}>{libraryTitle}</h1>
               <span>{copy.questionCount(filteredProblems.length)}</span>
             </div>
             <label className="search-field">
@@ -2294,8 +2453,8 @@ export default function Home() {
               })}
             </div>
 
-            {allQuickTestsPassed && (
-              <button className="next-review-button" type="button" onClick={() => { setNoteTab("line"); openNotesDrawer(); }}>
+            {allQuickTestsPassed && currentRecord.status !== "solved" && (
+              <button className="next-review-button" type="button" onClick={focusLineReflection}>
                 {copy.nextReview}
               </button>
             )}
@@ -2320,15 +2479,105 @@ export default function Home() {
           <div className="notes-head">
             <div>
               <div className="section-kicker">MY NOTEBOOK</div>
-              <h2>{copy.notebookTitle}</h2>
+              <h2 ref={notesHeadingRef} tabIndex={-1}>{copy.notebookTitle}</h2>
               <span className="notes-problem-label">{copy.notesForProblem} <strong>{currentProblem.id}. {currentProblem.title}</strong></span>
             </div>
             <div className="notes-head-actions">
               {nativeApp && <button type="button" className="share-note-button" onClick={handleShareNotes}><span aria-hidden="true">↗</span>{copy.shareNotes}</button>}
-              <span className="autosave-badge">{copy.saved}</span>
+              <span
+                className={`autosave-badge ${noteSaveIsError ? ideStyles.noteSaveError : ""}`}
+                role={noteSaveIsError ? "alert" : undefined}
+              >
+                {noteSaveLabel}
+              </span>
             </div>
           </div>
           {shareMessage && <p className="native-action-message" role="status">{shareMessage}</p>}
+
+          {allQuickTestsPassed && (
+            <section
+              className={`${ideStyles.completionGuide} ${currentRecord.status === "solved" ? ideStyles.completionSuccess : ""}`}
+              aria-labelledby={`completion-guide-title-${currentProblem.id}`}
+            >
+              {currentRecord.status === "solved" ? (
+                <div ref={completionStatusRef} tabIndex={-1} role="status" className={ideStyles.completionStatus}>
+                  <span className={ideStyles.completionCelebration} aria-hidden="true">✓</span>
+                  <div>
+                    <h3 id={`completion-guide-title-${currentProblem.id}`}>{copy.masteredTitle}</h3>
+                    <p>{copy.masteredBody}</p>
+                    <strong>
+                      {nextPracticeProblem
+                        ? copy.nextRecommended(nextPracticeProblem.id, nextPracticeProblem.title)
+                        : copy.allMastered}
+                    </strong>
+                  </div>
+                  <div className={ideStyles.completionActions}>
+                    {nextPracticeProblem && <button type="button" onClick={openNextPracticeProblem}>{copy.practiceNext}</button>}
+                    <button type="button" onClick={returnToStudyHome}>{copy.backToStudyHome}</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className={ideStyles.completionHeading}>
+                    <span aria-hidden="true">✓</span>
+                    <div>
+                      <h3 id={`completion-guide-title-${currentProblem.id}`}>{copy.completionTitle}</h3>
+                      <p>{nativeApp ? copy.nativeCompletionBody : copy.completionBody}</p>
+                    </div>
+                  </div>
+                  <ol className={ideStyles.completionSteps}>
+                    <li className={completionProgress.explainedKeyLines >= completionProgress.requiredKeyLines ? ideStyles.completionDone : ""}>
+                      <span className={ideStyles.completionMarker} aria-hidden="true">
+                        {completionProgress.explainedKeyLines >= completionProgress.requiredKeyLines ? "✓" : "1"}
+                      </span>
+                      <div>
+                        <strong>{copy.completionNotes(completionProgress.explainedKeyLines, completionProgress.requiredKeyLines)}</strong>
+                        {completionProgress.explainedKeyLines < completionProgress.requiredKeyLines && (
+                          <button type="button" onClick={focusLineReflection}>{copy.goExplain}</button>
+                        )}
+                      </div>
+                    </li>
+                    <li className={completionProgress.hasRecognitionSignal ? ideStyles.completionDone : ""}>
+                      <span className={ideStyles.completionMarker} aria-hidden="true">{completionProgress.hasRecognitionSignal ? "✓" : "2"}</span>
+                      <div>
+                        <strong>{copy.completionSignal}</strong>
+                        {!completionProgress.hasRecognitionSignal && (
+                          <button type="button" onClick={focusRecognitionSignal}>{copy.goWriteSignal}</button>
+                        )}
+                      </div>
+                    </li>
+                    <li>
+                      <span className={ideStyles.completionMarker} aria-hidden="true">3</span>
+                      <div>
+                        <strong>{nativeApp ? copy.nativeCompletionSubmit : copy.completionSubmit}</strong>
+                        {!nativeApp && (
+                          <a
+                            href={`${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {copy.openOfficialProblem}<span aria-hidden="true"> ↗</span>
+                          </a>
+                        )}
+                      </div>
+                    </li>
+                  </ol>
+                  <p className={ideStyles.completionReadiness} role="status">
+                    {completionProgress.notesReady ? copy.reflectionReady : copy.reflectionNeeded}
+                  </p>
+                  <button
+                    className={ideStyles.completionPrimary}
+                    type="button"
+                    onClick={completionProgress.notesReady ? markCurrentProblemSolved : continueCompletionReflection}
+                  >
+                    {completionProgress.notesReady
+                      ? (nativeApp ? copy.confirmValidated : copy.confirmAccepted)
+                      : copy.continueReflection}
+                  </button>
+                </>
+              )}
+            </section>
+          )}
 
           <div
             className="note-tabs"
@@ -2345,11 +2594,11 @@ export default function Home() {
               <strong>{currentProblem.id}. {currentProblem.title}</strong>
               <span>{copy.difficultyLabels[currentProblem.difficulty]} · {currentProblem.topic}</span>
             </div>
-            <button type="button" onClick={() => selectMobileWorkspacePane("code")}>{copy.viewProblemAndCode}</button>
+            <button type="button" onClick={showCodeFromNotes}>{copy.viewProblemAndCode}</button>
           </div>
 
           {noteTab === "line" ? (
-            <div id="line-notes-panel" role="tabpanel" aria-labelledby="line-notes-tab" className="line-notes-view">
+            <div ref={lineNotesPanelRef} id="line-notes-panel" role="tabpanel" aria-labelledby="line-notes-tab" className="line-notes-view">
               <div className="line-note-intro">
                 <p>{copy.linePrompt}<strong>{copy.lineQuestions}</strong></p>
                 <button type="button" onClick={fillLineNotes}>{copy.fillNotes}</button>
@@ -2402,6 +2651,7 @@ export default function Home() {
                       <span className="note-line-number">{String(index + 1).padStart(2, "0")}</span>
                       <code>{line || copy.blankLine}</code>
                       <textarea
+                        data-line-index={index}
                         value={currentRecord.lineNotes[index] ?? ""}
                         onChange={(event) => updateLineNote(index, event.target.value)}
                         placeholder={explainLine(line, language)}
@@ -2427,25 +2677,23 @@ export default function Home() {
               <label>
                 <span><b>3</b> {copy.reviewTitle}</span>
                 <small>{copy.reviewHelp}</small>
-                <textarea rows={5} value={currentRecord.review} onChange={(event) => updateRecord({ review: event.target.value })} placeholder={copy.reviewPlaceholder} />
+                <textarea ref={recognitionSignalRef} rows={5} value={currentRecord.review} onChange={(event) => updateRecord({ review: event.target.value })} placeholder={copy.reviewPlaceholder} />
               </label>
             </div>
           )}
 
           <div className="mastery-box">
-            {allQuickTestsPassed && currentRecord.status !== "solved" && (
-              <button className={`next-review-button ${ideStyles.masteryAction}`} type="button" onClick={markCurrentProblemSolved}>
-                ✓ {copy.markMastered}
-              </button>
-            )}
             <span>{copy.problemStatus}</span>
-            <div className="status-buttons">
+            <small id={`practice-status-help-${currentProblem.id}`} className={ideStyles.statusHelp}>{copy.statusHelp}</small>
+            <div className="status-buttons" aria-describedby={`practice-status-help-${currentProblem.id}`}>
               {(Object.keys(copy.statusLabels) as LearningStatus[]).map((status) => (
                 <button
                   type="button"
                   key={status}
                   className={currentRecord.status === status ? "is-active" : ""}
-                  onClick={() => updateRecord({ status })}
+                  disabled={(status === "solved" && currentRecord.status !== "solved")
+                    || (currentRecord.status === "solved" && status !== "solved" && status !== "review")}
+                  onClick={() => updateCurrentPracticeStatus(status)}
                 >
                   {copy.statusLabels[status]}
                 </button>

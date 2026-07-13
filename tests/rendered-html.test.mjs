@@ -74,8 +74,9 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(pageSource, /原题 \+ 代码/);
   assert.match(pageSource, /mobile-notes-context/);
   assert.match(pageSource, /app-mode-nav/);
-  assert.match(pageSource, /测试通过，下一步：解释关键代码/);
-  assert.match(pageSource, /完成本题，标记为已掌握/);
+  assert.match(pageSource, /本机测试通过，完成 3 步巩固/);
+  assert.match(pageSource, /我已在力扣 Accepted，标记掌握/);
+  assert.match(pageSource, /推荐下一题/);
   assert.match(pageSource, /保存失败，请先复制重要笔记/);
   assert.match(pageSource, /saveErrorBanner/);
   assert.match(pageSource, /mobile-workspace-tabs/);
