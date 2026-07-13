@@ -21,6 +21,13 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /noteLineMode/);
   assert.match(page, /noteLineIndexes/);
   assert.match(page, /onCursorLineChange/);
+  assert.match(page, /selectMobileWorkspacePane/);
+  assert.match(page, /handleTabListKeyDown/);
+  assert.match(page, /tabIndex=\{mobileWorkspaceTab === "code" \? 0 : -1\}/);
+  assert.match(page, /aria-labelledby="mobile-code-tab"/);
+  assert.match(page, /untouchedStarterLine/);
+  assert.match(page, /lineNotes: \[\]/);
+  assert.match(page, /markCurrentProblemSolved/);
   assert.doesNotMatch(page, /if \(allPassed\) updateRecord\(\{ status: "solved" \}\)/);
   assert.doesNotMatch(page, /className="code-field"/);
 

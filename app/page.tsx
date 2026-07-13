@@ -29,7 +29,7 @@ import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
-import { beginnerPythonErrorHint, messageBelongsToRun, solutionErrorLine } from "./run-session";
+import { beginnerPythonErrorHint, messageBelongsToRun, solutionErrorLine, untouchedStarterLine } from "./run-session";
 import {
   STUDY_STORAGE_VERSION,
   normalizeLearningProfile,
@@ -40,6 +40,7 @@ import {
   type StudyRecord,
   type StudyRecords,
 } from "./study-storage";
+import { nextTabIndex } from "./tab-navigation";
 
 export const dynamic = "force-static";
 
@@ -140,7 +141,8 @@ const pageCopy = {
     resetCode: "恢复初始代码",
     run: "运行测试",
     running: "运行中…",
-    nextReview: "测试通过，下一步：写复盘 →",
+    nextReview: "测试通过，下一步：解释关键代码 →",
+    markMastered: "完成本题，标记为已掌握",
     editorLabel: "Python 代码编辑器",
     quickTest: "快速测试",
     testHelp: "检查示例是否通过；最终结果仍以力扣提交为准。",
@@ -177,7 +179,8 @@ const pageCopy = {
     difficultyLabels: { 简单: "简单", 中等: "中等", 困难: "困难" } as Record<Problem["difficulty"], string>,
     notRun: "还没有运行测试",
     resetMessage: "代码已恢复，还没有运行测试",
-    resetConfirm: "确定恢复这道题的初始代码吗？你的每行代码说明会保留。",
+    resetConfirm: "确定恢复初始代码吗？逐行解释会清空，解题思路和复盘会保留。",
+    starterPrompt: (line: number) => `先把第 ${line} 行的 pass 换成你的解法，再运行测试。`,
     loadingPython: "正在加载 Python 环境…首次运行会稍慢",
     runningCode: "正在运行…",
     timeout: "运行超过 20 秒，已自动停止。请检查是否写了不会结束的循环。",
@@ -278,7 +281,8 @@ const pageCopy = {
     resetCode: "Reset starter code",
     run: "Run tests",
     running: "Running…",
-    nextReview: "Tests passed — next: write your review →",
+    nextReview: "Tests passed — next: explain key lines →",
+    markMastered: "Finish and mark as mastered",
     editorLabel: "Python code editor",
     quickTest: "Quick tests",
     testHelp: "Check the examples here; LeetCode remains the final judge.",
@@ -315,7 +319,8 @@ const pageCopy = {
     difficultyLabels: { 简单: "Easy", 中等: "Medium", 困难: "Hard" } as Record<Problem["difficulty"], string>,
     notRun: "No tests run yet",
     resetMessage: "Starter code restored; no tests run yet",
-    resetConfirm: "Restore the starter code? Your line notes will be kept.",
+    resetConfirm: "Restore the starter code? Line explanations will be cleared; your approach and review will stay.",
+    starterPrompt: (line: number) => `Replace pass on line ${line} with your solution before running tests.`,
     loadingPython: "Loading Python… the first run may take a moment",
     runningCode: "Running…",
     timeout: "Stopped after 20 seconds. Check for a loop that never ends.",
@@ -370,6 +375,10 @@ const difficultyOrder: Record<Problem["difficulty"], number> = {
   中等: 1,
   困难: 2,
 };
+
+const MOBILE_WORKSPACE_TABS = ["library", "code", "notes"] as const;
+const NOTE_TABS = ["line", "review"] as const;
+const COMPACT_WORKSPACE_QUERY = "(max-width: 760px)";
 
 function explainLine(line: string, language: Language): string {
   const code = line.trim();
@@ -460,6 +469,22 @@ function trapDrawerFocus(event: ReactKeyboardEvent<HTMLElement>, close: () => vo
     event.preventDefault();
     first.focus();
   }
+}
+
+function handleTabListKeyDown<T extends string>(
+  event: ReactKeyboardEvent<HTMLElement>,
+  values: readonly T[],
+  currentValue: T,
+  onSelect: (value: T) => void,
+) {
+  const nextIndex = nextTabIndex(values.indexOf(currentValue), values.length, event.key);
+  if (nextIndex === null) return;
+  const nextValue = values[nextIndex];
+  if (!nextValue) return;
+  event.preventDefault();
+  onSelect(nextValue);
+  const tabs = event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]');
+  window.requestAnimationFrame(() => tabs[nextIndex]?.focus());
 }
 
 export default function Home() {
@@ -680,6 +705,18 @@ export default function Home() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [showNotesDrawer, showProblemList]);
 
+  useEffect(() => {
+    const compactWorkspace = window.matchMedia(COMPACT_WORKSPACE_QUERY);
+    function closeDesktopDrawersOnCompactLayout() {
+      if (!compactWorkspace.matches) return;
+      setShowProblemList(false);
+      setShowNotesDrawer(false);
+    }
+    closeDesktopDrawersOnCompactLayout();
+    compactWorkspace.addEventListener("change", closeDesktopDrawersOnCompactLayout);
+    return () => compactWorkspace.removeEventListener("change", closeDesktopDrawersOnCompactLayout);
+  }, []);
+
   function updateRecord(patch: Partial<StudyRecord>) {
     setRecords((previous) => ({
       ...previous,
@@ -745,7 +782,17 @@ export default function Home() {
     runtimeReadyRef.current = false;
   }
 
+  function selectMobileWorkspacePane(pane: typeof MOBILE_WORKSPACE_TABS[number]) {
+    setShowProblemList(false);
+    setShowNotesDrawer(false);
+    setMobileWorkspaceTab(pane);
+  }
+
   function openProblemListDrawer() {
+    if (window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) {
+      selectMobileWorkspacePane("library");
+      return;
+    }
     setShowNotesDrawer(false);
     setShowProblemList(true);
     setMobileWorkspaceTab("library");
@@ -757,6 +804,10 @@ export default function Home() {
   }
 
   function openNotesDrawer() {
+    if (window.matchMedia(COMPACT_WORKSPACE_QUERY).matches) {
+      selectMobileWorkspacePane("notes");
+      return;
+    }
     setShowProblemList(false);
     setShowNotesDrawer(true);
     setMobileWorkspaceTab("notes");
@@ -895,8 +946,15 @@ export default function Home() {
   function resetCode() {
     if (!window.confirm(copy.resetConfirm)) return;
     cancelActiveRun();
-    updateRecord({ code: currentProblem.starterCode, status: "todo" });
+    updateRecord({ code: currentProblem.starterCode, lineNotes: [], status: "todo" });
+    setNoteLineMode("current");
+    selectCodeLine(1);
     setRunState({ phase: "idle", message: copy.resetMessage, results: [] });
+  }
+
+  function markCurrentProblemSolved() {
+    updateRecord({ status: "solved" });
+    void playTestHaptic(true);
   }
 
   function updateEditorCode(nextCode: string, lineNoteEdit?: LineNoteEdit) {
@@ -922,6 +980,13 @@ export default function Home() {
 
   function runTests() {
     if (runState.phase === "running" || activeRunRef.current) return;
+
+    const placeholderLine = untouchedStarterLine(currentRecord.code, currentProblem.starterCode);
+    if (placeholderLine !== null) {
+      setRunState({ phase: "idle", message: copy.starterPrompt(placeholderLine), results: [] });
+      selectCodeLine(placeholderLine);
+      return;
+    }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
@@ -1171,14 +1236,19 @@ export default function Home() {
             onClick={() => { if (showProblemList) closeProblemListDrawer(); else closeNotesDrawer(); }}
           />
         )}
-        <nav className="mobile-workspace-tabs" role="tablist" aria-label={copy.mobileWorkspace}>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={openProblemListDrawer}>
+        <nav
+          className="mobile-workspace-tabs"
+          role="tablist"
+          aria-label={copy.mobileWorkspace}
+          onKeyDown={(event) => handleTabListKeyDown(event, MOBILE_WORKSPACE_TABS, mobileWorkspaceTab, selectMobileWorkspacePane)}
+        >
+          <button id="mobile-library-tab" type="button" role="tab" tabIndex={mobileWorkspaceTab === "library" ? 0 : -1} aria-selected={mobileWorkspaceTab === "library"} aria-controls="mobile-library-panel" className={mobileWorkspaceTab === "library" ? "is-active" : ""} onClick={() => selectMobileWorkspacePane("library")}>
             <span aria-hidden="true">☷</span>{copy.mobileProblemList}
           </button>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => { closeProblemListDrawer(false); closeNotesDrawer(false); setMobileWorkspaceTab("code"); }}>
+          <button id="mobile-code-tab" type="button" role="tab" tabIndex={mobileWorkspaceTab === "code" ? 0 : -1} aria-selected={mobileWorkspaceTab === "code"} aria-controls="mobile-code-panel" className={mobileWorkspaceTab === "code" ? "is-active" : ""} onClick={() => selectMobileWorkspacePane("code")}>
             <span aria-hidden="true">{">_"}</span>{copy.mobileCode}
           </button>
-          <button type="button" role="tab" aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={openNotesDrawer}>
+          <button id="mobile-notes-tab" type="button" role="tab" tabIndex={mobileWorkspaceTab === "notes" ? 0 : -1} aria-selected={mobileWorkspaceTab === "notes"} aria-controls="mobile-notes-panel" className={mobileWorkspaceTab === "notes" ? "is-active" : ""} onClick={() => selectMobileWorkspacePane("notes")}>
             <span aria-hidden="true">✎</span>{copy.mobileNotes}
           </button>
         </nav>
@@ -1187,9 +1257,10 @@ export default function Home() {
           ref={libraryDrawerRef}
           role={showProblemList ? "dialog" : "tabpanel"}
           aria-modal={showProblemList ? true : undefined}
+          aria-labelledby={showProblemList ? undefined : "mobile-library-tab"}
           className={`panel library-panel mobile-workspace-pane ${ideStyles.libraryDrawer} ${showProblemList ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "library" ? "is-mobile-active" : ""}`}
-          aria-label={libraryTitle}
-          onKeyDown={(event) => trapDrawerFocus(event, closeProblemListDrawer)}
+          aria-label={showProblemList ? libraryTitle : undefined}
+          onKeyDown={showProblemList ? (event) => trapDrawerFocus(event, closeProblemListDrawer) : undefined}
         >
           <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭题目列表" : "Close problem list"} onClick={() => { closeProblemListDrawer(); setMobileWorkspaceTab("code"); }}>×</button>
           <div className="library-head">
@@ -1257,7 +1328,7 @@ export default function Home() {
           </div>
         </aside>
 
-        <section id="mobile-code-panel" role="tabpanel" className={`panel focus-panel mobile-workspace-pane ${ideStyles.focusPanel} ${mobileWorkspaceTab === "code" ? "is-mobile-active" : ""}`} aria-label={`${currentProblem.title} · Python`}>
+        <section id="mobile-code-panel" role="tabpanel" aria-labelledby="mobile-code-tab" className={`panel focus-panel mobile-workspace-pane ${ideStyles.focusPanel} ${mobileWorkspaceTab === "code" ? "is-mobile-active" : ""}`}>
           <article className={`problem-brief ${ideStyles.problemPane}`}>
             <div className={ideStyles.problemTabs}><span>{language === "zh" ? "题目描述" : "Description"}</span></div>
             <div className={ideStyles.problemContent}>
@@ -1414,7 +1485,7 @@ export default function Home() {
             </div>
 
             {allQuickTestsPassed && (
-              <button className="next-review-button" type="button" onClick={() => { setNoteTab("review"); openNotesDrawer(); }}>
+              <button className="next-review-button" type="button" onClick={() => { setNoteTab("line"); openNotesDrawer(); }}>
                 {copy.nextReview}
               </button>
             )}
@@ -1430,9 +1501,10 @@ export default function Home() {
           ref={notesDrawerRef}
           role={showNotesDrawer ? "dialog" : "tabpanel"}
           aria-modal={showNotesDrawer ? true : undefined}
+          aria-labelledby={showNotesDrawer ? undefined : "mobile-notes-tab"}
           className={`panel notes-panel mobile-workspace-pane ${ideStyles.notesDrawer} ${showNotesDrawer ? ideStyles.drawerOpen : ""} ${mobileWorkspaceTab === "notes" ? "is-mobile-active" : ""}`}
-          aria-label={copy.notebookLabel}
-          onKeyDown={(event) => trapDrawerFocus(event, closeNotesDrawer)}
+          aria-label={showNotesDrawer ? copy.notebookLabel : undefined}
+          onKeyDown={showNotesDrawer ? (event) => trapDrawerFocus(event, closeNotesDrawer) : undefined}
         >
           <button type="button" className={ideStyles.drawerClose} aria-label={language === "zh" ? "关闭笔记" : "Close notes"} onClick={() => { closeNotesDrawer(); setMobileWorkspaceTab("code"); }}>×</button>
           <div className="notes-head">
@@ -1448,9 +1520,14 @@ export default function Home() {
           </div>
           {shareMessage && <p className="native-action-message" role="status">{shareMessage}</p>}
 
-          <div className="note-tabs" role="tablist" aria-label={copy.notebookLabel}>
-            <button type="button" role="tab" aria-selected={noteTab === "line"} className={noteTab === "line" ? "is-active" : ""} onClick={() => setNoteTab("line")}>{copy.lineNotes}</button>
-            <button type="button" role="tab" aria-selected={noteTab === "review"} className={noteTab === "review" ? "is-active" : ""} onClick={() => setNoteTab("review")}>{copy.reflection}</button>
+          <div
+            className="note-tabs"
+            role="tablist"
+            aria-label={copy.notebookLabel}
+            onKeyDown={(event) => handleTabListKeyDown(event, NOTE_TABS, noteTab, setNoteTab)}
+          >
+            <button id="line-notes-tab" type="button" role="tab" tabIndex={noteTab === "line" ? 0 : -1} aria-selected={noteTab === "line"} aria-controls="line-notes-panel" className={noteTab === "line" ? "is-active" : ""} onClick={() => setNoteTab("line")}>{copy.lineNotes}</button>
+            <button id="review-notes-tab" type="button" role="tab" tabIndex={noteTab === "review" ? 0 : -1} aria-selected={noteTab === "review"} aria-controls="review-notes-panel" className={noteTab === "review" ? "is-active" : ""} onClick={() => setNoteTab("review")}>{copy.reflection}</button>
           </div>
 
           <div className="mobile-notes-context">
@@ -1462,7 +1539,7 @@ export default function Home() {
           </div>
 
           {noteTab === "line" ? (
-            <div className="line-notes-view">
+            <div id="line-notes-panel" role="tabpanel" aria-labelledby="line-notes-tab" className="line-notes-view">
               <div className="line-note-intro">
                 <p>{copy.linePrompt}<strong>{copy.lineQuestions}</strong></p>
                 <button type="button" onClick={fillLineNotes}>{copy.fillNotes}</button>
@@ -1526,7 +1603,7 @@ export default function Home() {
               </div>
             </div>
           ) : (
-            <div className="review-notes-view">
+            <div id="review-notes-panel" role="tabpanel" aria-labelledby="review-notes-tab" className="review-notes-view">
               <label>
                 <span><b>1</b> {copy.thinkingTitle}</span>
                 <small>{copy.thinkingHelp}</small>
@@ -1546,6 +1623,11 @@ export default function Home() {
           )}
 
           <div className="mastery-box">
+            {allQuickTestsPassed && currentRecord.status !== "solved" && (
+              <button className={`next-review-button ${ideStyles.masteryAction}`} type="button" onClick={markCurrentProblemSolved}>
+                ✓ {copy.markMastered}
+              </button>
+            )}
             <span>{copy.problemStatus}</span>
             <div className="status-buttons">
               {(Object.keys(copy.statusLabels) as LearningStatus[]).map((status) => (

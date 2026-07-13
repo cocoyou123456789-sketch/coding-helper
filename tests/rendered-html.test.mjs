@@ -80,7 +80,8 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.match(pageSource, /原题 \+ 代码/);
   assert.match(pageSource, /mobile-notes-context/);
   assert.match(pageSource, /app-mode-nav/);
-  assert.match(pageSource, /测试通过，下一步：写复盘/);
+  assert.match(pageSource, /测试通过，下一步：解释关键代码/);
+  assert.match(pageSource, /完成本题，标记为已掌握/);
   assert.match(pageSource, /mobile-workspace-tabs/);
   assert.match(pageSource, /LeetCodeCodeEditor/);
   assert.match(pageSource, /去 LeetCode 提交/);

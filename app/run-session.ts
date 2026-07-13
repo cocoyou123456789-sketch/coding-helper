@@ -6,6 +6,15 @@ type WorkerMessageLike = {
   phase?: unknown;
 };
 
+/** Return the first placeholder line only while the user has not changed the starter code. */
+export function untouchedStarterLine(code: string, starterCode: string): number | null {
+  if (code.replace(/\r\n?/g, "\n").trim() !== starterCode.replace(/\r\n?/g, "\n").trim()) {
+    return null;
+  }
+  const placeholderIndex = code.split(/\r?\n/).findIndex((line) => /^\s*pass\s*(?:#.*)?$/.test(line));
+  return placeholderIndex >= 0 ? placeholderIndex + 1 : 1;
+}
+
 /** Runtime loading messages are global; every other message must match this exact run. */
 export function messageBelongsToRun(message: WorkerMessageLike, requestId: string): boolean {
   if (message.id === requestId) return true;

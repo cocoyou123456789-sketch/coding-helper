@@ -536,6 +536,11 @@
   color: #fff;
 }
 
+.masteryAction {
+  margin: 0 0 9px;
+  min-height: 42px;
+}
+
 @media (max-width: 1120px) and (min-width: 761px) {
   .workspace {
     height: calc(100dvh - 137px);

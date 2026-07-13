@@ -5,7 +5,15 @@ import {
   beginnerPythonErrorHint,
   messageBelongsToRun,
   solutionErrorLine,
+  untouchedStarterLine,
 } from "../app/run-session.ts";
+
+test("unchanged starter code points to pass without starting Python", () => {
+  const starter = "class Solution:\n    def solve(self):\n        # write here\n        pass";
+  assert.equal(untouchedStarterLine(starter, starter), 4);
+  assert.equal(untouchedStarterLine(`\n${starter}\n`, starter), 5);
+  assert.equal(untouchedStarterLine(starter.replace("pass", "return 1"), starter), null);
+});
 
 test("run messages cannot leak into a newer problem request", () => {
   assert.equal(messageBelongsToRun({ type: "result", id: "1:4" }, "1:4"), true);
