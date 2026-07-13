@@ -561,6 +561,184 @@
   margin-left: 7px;
 }
 
+.libraryStatusFilters {
+  margin-top: 11px;
+}
+
+.libraryStatusFilters > span {
+  color: #765e67;
+  display: block;
+  font-size: var(--ide-caption);
+  font-weight: 750;
+  margin-bottom: 6px;
+}
+
+.libraryStatusFilters > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.libraryStatusFilters button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ead0d9;
+  border-radius: 999px;
+  color: #765e67;
+  display: inline-flex;
+  font-size: var(--ide-caption);
+  font-weight: 750;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 8px 0 10px;
+}
+
+.libraryStatusFilters button b {
+  align-items: center;
+  background: #f4e5ea;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: inherit;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 5px;
+}
+
+.libraryStatusFilters .libraryFilterActive,
+.libraryStatusFilters .libraryFilterActive:hover {
+  background: #bd4169;
+  border-color: #bd4169;
+  color: #fff;
+}
+
+.libraryStatusFilters .libraryFilterActive b {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.libraryContinueCard {
+  background: linear-gradient(145deg, #fff9fb, #fceaf0);
+  border: 1px solid #e8c6d1;
+  border-radius: 11px;
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px;
+}
+
+.libraryContinueCard > div:first-child strong,
+.libraryContinueCard > div:first-child small {
+  display: block;
+}
+
+.libraryContinueCard > div:first-child strong {
+  color: #4b2c36;
+  font-size: var(--ide-small);
+}
+
+.libraryContinueCard > div:first-child small {
+  color: #80646e;
+  font-size: var(--ide-caption);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.libraryContinueCard > button {
+  align-items: center;
+  background: #bd4169;
+  border: 1px solid #bd4169;
+  border-radius: 9px;
+  color: #fff;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 7px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.libraryContinueCard > button:hover:not(:disabled) {
+  background: #9e3153;
+  border-color: #9e3153;
+}
+
+.libraryContinueCard > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.libraryContinueCard > button > span {
+  font-size: var(--ide-small);
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.libraryContinueCard > button > small {
+  flex: 0 0 auto;
+  font-size: var(--ide-caption);
+  font-weight: 750;
+}
+
+.libraryScopeComplete {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.libraryScopeComplete span {
+  color: #765e67;
+  font-size: var(--ide-caption);
+  line-height: 1.4;
+}
+
+.libraryScopeComplete button,
+.currentProblemHidden button,
+.libraryEmpty button {
+  background: #fff;
+  border: 1px solid #d7aebe;
+  border-radius: 8px;
+  color: #8b3150;
+  flex: 0 0 auto;
+  font-size: var(--ide-caption);
+  font-weight: 800;
+  min-height: 34px;
+  padding: 0 9px;
+}
+
+.currentProblemHidden {
+  align-items: center;
+  background: #fff7e8;
+  border-bottom: 1px solid #ecd9b3;
+  color: #70562c;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: var(--ide-caption);
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1.4;
+  padding: 8px 12px;
+}
+
+.libraryEmpty {
+  align-items: center;
+  color: #765e67;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  min-height: 180px;
+  padding: 20px;
+  text-align: center;
+}
+
+.libraryEmpty p {
+  font-size: var(--ide-small);
+  line-height: 1.5;
+  margin: 0;
+}
+
 .libraryDrawer :global(.section-kicker),
 .libraryDrawer :global(.problem-name small),
 .libraryDrawer :global(.problem-number),
@@ -1007,6 +1185,29 @@
 
   .lineNoteNavigator button {
     min-height: 44px;
+  }
+
+  .libraryStatusFilters button,
+  .libraryContinueCard > button,
+  .libraryScopeComplete button,
+  .currentProblemHidden button,
+  .libraryEmpty button {
+    min-height: 44px;
+  }
+
+  .libraryStatusFilters button {
+    font-size: max(16px, var(--ide-caption));
+  }
+
+  .libraryContinueCard > button > span,
+  .currentProblemHidden,
+  .libraryEmpty p {
+    font-size: max(16px, var(--ide-small));
+  }
+
+  .currentProblemHidden {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .completionSteps li {

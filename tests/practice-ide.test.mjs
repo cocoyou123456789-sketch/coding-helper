@@ -50,7 +50,7 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /lineNotes: \[\]/);
   assert.match(page, /markCurrentProblemSolved/);
   assert.match(page, /practiceCompletionProgress/);
-  assert.match(page, /nextRecommendedProblemId/);
+  assert.match(page, /recommendedPracticeProblemId/);
   assert.match(page, /completionProgress\.notesReady/);
   assert.match(page, /className=\{ideStyles\.completionPrimary\}/);
   assert.match(page, /copy\.confirmAccepted/);
@@ -69,7 +69,16 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /focusMobileWorkspaceHeading\(notesHeadingRef\)/);
   assert.match(page, /showCodeFromNotes/);
   assert.match(page, /data-line-index=\{index\}/);
+  assert.match(page, /PRACTICE_STATUS_FILTERS/);
+  assert.match(page, /practiceStatusAfterActivity/);
+  assert.match(page, /recommendedPracticeProblemId/);
+  assert.match(page, /const completionRecommendationScope = continuationScopeProblems\.filter/);
+  assert.match(page, /aria-pressed=\{statusFilter === status\}/);
+  assert.match(page, /aria-live="polite" aria-atomic="true"/);
+  assert.match(page, /openRecommendedPractice/);
+  assert.match(page, /updateRecord\(\{ code: currentProblem\.starterCode, lineNotes: \[\] \}\)/);
   assert.doesNotMatch(page, /if \(allPassed\) updateRecord\(\{ status: "solved" \}\)/);
+  assert.doesNotMatch(page, /code: currentProblem\.starterCode, lineNotes: \[\], status: "todo"/);
   assert.doesNotMatch(page, /autosave-badge">\{copy\.saved\}/);
   assert.doesNotMatch(page, /onClick=\{\(\) => updateRecord\(\{ status \}\)\}/);
   assert.doesNotMatch(page, /className="code-field"/);
@@ -96,6 +105,9 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.completionGuide/);
   assert.match(styles, /\.completionSuccess/);
   assert.match(styles, /\.noteSaveError/);
+  assert.match(styles, /\.libraryStatusFilters/);
+  assert.match(styles, /\.libraryContinueCard/);
+  assert.match(styles, /\.libraryEmpty/);
   assert.match(styles, /\.editorLoading/);
   assert.match(styles, /@media \(max-width: 760px\)/);
 });

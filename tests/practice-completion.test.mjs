@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  nextRecommendedProblemId,
   practiceCompletionProgress,
   practiceKeyLineIndexes,
 } from "../app/practice-completion.ts";
@@ -66,21 +65,4 @@ test("starter scaffolding and generated suggestions do not count as personal ref
     hasRecognitionSignal: false,
     notesReady: false,
   });
-});
-
-test("next recommendation prefers the same level and skips mastered problems", () => {
-  const problems = [
-    { id: 1, difficulty: "easy" },
-    { id: 2, difficulty: "medium" },
-    { id: 3, difficulty: "easy" },
-    { id: 4, difficulty: "easy" },
-  ];
-
-  assert.equal(nextRecommendedProblemId(problems, 1, { 3: { status: "solved" } }), 4);
-  assert.equal(nextRecommendedProblemId(problems, 4, { 1: { status: "solved" }, 3: { status: "solved" } }), 2);
-  assert.equal(nextRecommendedProblemId(problems, 2, {
-    1: { status: "solved" },
-    3: { status: "solved" },
-    4: { status: "solved" },
-  }), null);
 });

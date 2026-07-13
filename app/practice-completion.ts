@@ -1,12 +1,3 @@
-type PracticeProblem = {
-  id: number;
-  difficulty: string;
-};
-
-type PracticeRecord = {
-  status?: string;
-};
-
 export type PracticeCompletionProgress = {
   explainedKeyLines: number;
   requiredKeyLines: number;
@@ -56,24 +47,4 @@ export function practiceCompletionProgress(
       && explainedKeyLines >= requiredKeyLines
       && hasRecognitionSignal,
   };
-}
-
-/** Prefer an unsolved problem at the same difficulty, continuing forward and wrapping once. */
-export function nextRecommendedProblemId(
-  problems: PracticeProblem[],
-  currentId: number,
-  records: Record<number, PracticeRecord | undefined>,
-): number | null {
-  if (problems.length <= 1) return null;
-  const currentIndex = problems.findIndex((problem) => problem.id === currentId);
-  const startIndex = currentIndex >= 0 ? currentIndex : -1;
-  const currentDifficulty = currentIndex >= 0 ? problems[currentIndex]?.difficulty : undefined;
-  const ordered = Array.from({ length: problems.length }, (_, offset) => {
-    const index = (startIndex + offset + 1) % problems.length;
-    return problems[index];
-  }).filter((problem): problem is PracticeProblem => Boolean(problem && problem.id !== currentId));
-  const unsolved = ordered.filter((problem) => records[problem.id]?.status !== "solved");
-  return unsolved.find((problem) => problem.difficulty === currentDifficulty)?.id
-    ?? unsolved[0]?.id
-    ?? null;
 }

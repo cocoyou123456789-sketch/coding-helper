@@ -43,7 +43,15 @@ import {
 } from "./native-app";
 import { localizeDetail, localizeProblem, type Language } from "./problem-i18n";
 import { problems, type Problem } from "./problems";
-import { nextRecommendedProblemId, practiceCompletionProgress, practiceKeyLineIndexes } from "./practice-completion";
+import { practiceCompletionProgress, practiceKeyLineIndexes } from "./practice-completion";
+import {
+  filterProblemsByStatus,
+  practiceRecordStatus,
+  practiceStatusAfterActivity,
+  practiceStatusCounts,
+  recommendedPracticeProblemId,
+  type PracticeStatusFilter,
+} from "./practice-library";
 import ideStyles from "./practice-ide.module.css";
 import PwaInstaller from "./pwa-installer";
 import { beginnerPythonErrorHint, describeFirstMismatch, messageBelongsToRun, solutionErrorLine, starterPlaceholderLine } from "./run-session";
@@ -199,7 +207,6 @@ const pageCopy = {
     currentPractice: "当前练习",
     libraryTitle: "Hot 100 + 加练",
     nativeLibraryTitle: "经典算法练习题库",
-    questionCount: (count: number) => `${count} 题`,
     search: "搜索题目",
     searchPlaceholder: "搜索题号或题名",
     topic: "题型",
@@ -210,6 +217,20 @@ const pageCopy = {
     learning: "学习中",
     notMastered: "未掌握",
     noMatch: "没有找到匹配的题目，换个关键词试试。",
+    statusFilter: "学习状态",
+    allStatuses: "全部",
+    statusFilterLabel: "按学习状态筛选题目",
+    resultSummary: (label: string, count: number) => `${label} · ${count} 题`,
+    continuePractice: "继续学习",
+    continueRule: "在当前难度和题型中：先续学，再复习，最后开新题。",
+    continueProblem: (status: LearningStatus, id: number, title: string) => `${status === "learning" ? "继续" : status === "review" ? "复习" : "开始"} ${id}. ${title}`,
+    scopeComplete: "当前筛选范围已全部掌握。",
+    allProblemsComplete: "全部题目都已掌握，可以回学习首页安排复习。",
+    clearFilters: "清除筛选",
+    showAllStatuses: "显示全部状态",
+    noStatusMatch: (label: string) => `当前没有“${label}”题目。`,
+    currentProblemHidden: (id: number, title: string) => `当前题 ${id}. ${title} 被筛选隐藏了。`,
+    showCurrentProblem: "显示当前题",
     beginnerTipTitle: "先把题目说成人话",
     beginnerTipBody: "能复述输入和输出，再开始写代码。",
     officialProblem: (id: number, title: string) => `来源：LeetCode ${id}《${title}》↗`,
@@ -416,7 +437,6 @@ const pageCopy = {
     currentPractice: "Current problem",
     libraryTitle: "Hot 100 + Extra Practice",
     nativeLibraryTitle: "Classic Algorithm Practice Set",
-    questionCount: (count: number) => `${count} problems`,
     search: "Search problems",
     searchPlaceholder: "Search by number or title",
     topic: "Topic",
@@ -427,6 +447,20 @@ const pageCopy = {
     learning: "Learning",
     notMastered: "Not mastered",
     noMatch: "No matching problems. Try another search.",
+    statusFilter: "Study status",
+    allStatuses: "All",
+    statusFilterLabel: "Filter problems by study status",
+    resultSummary: (label: string, count: number) => `${label} · ${count} problems`,
+    continuePractice: "Continue learning",
+    continueRule: "Within this level and topic: resume, review, then start something new.",
+    continueProblem: (status: LearningStatus, id: number, title: string) => `${status === "learning" ? "Continue" : status === "review" ? "Review" : "Start"} ${id}. ${title}`,
+    scopeComplete: "Everything in the current filter is mastered.",
+    allProblemsComplete: "Every problem is mastered. Return to Study Home to plan a review.",
+    clearFilters: "Clear filters",
+    showAllStatuses: "Show every status",
+    noStatusMatch: (label: string) => `There are no “${label}” problems here yet.`,
+    currentProblemHidden: (id: number, title: string) => `Current problem ${id}. ${title} is hidden by the filters.`,
+    showCurrentProblem: "Show current problem",
     beginnerTipTitle: "Say the problem in plain language",
     beginnerTipBody: "Explain the input and output before writing code.",
     officialProblem: (id: number, title: string) => `Source: LeetCode ${id} “${title}” ↗`,
@@ -610,6 +644,7 @@ const difficultyOrder: Record<Problem["difficulty"], number> = {
 
 const MOBILE_WORKSPACE_TABS = ["library", "code", "notes"] as const;
 const NOTE_TABS = ["line", "review"] as const;
+const PRACTICE_STATUS_FILTERS = ["all", "learning", "review", "todo", "solved"] as const satisfies readonly PracticeStatusFilter[];
 const COMPACT_WORKSPACE_QUERY = "(max-width: 760px)";
 
 function explainLine(line: string, language: Language): string {
@@ -727,6 +762,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [topic, setTopic] = useState("all");
   const [difficultyFilter, setDifficultyFilter] = useState<"all" | Problem["difficulty"]>("简单");
+  const [statusFilter, setStatusFilter] = useState<PracticeStatusFilter>("all");
   const [noteTab, setNoteTab] = useState<"line" | "review">("line");
   const [noteLineMode, setNoteLineMode] = useState<"current" | "all">("current");
   const [activeCodeLine, setActiveCodeLine] = useState(1);
@@ -841,10 +877,6 @@ export default function Home() {
     currentRecord.review,
     generatedLineNoteAlternatives,
   );
-  const nextProblemId = nextRecommendedProblemId(displayProblems, currentProblem.id, records);
-  const nextPracticeProblem = nextProblemId
-    ? displayProblems.find((problem) => problem.id === nextProblemId)
-    : undefined;
   const noteSaveLabel = staleStudyData
     ? copy.staleTitle
     : storageReadOnly
@@ -871,22 +903,55 @@ export default function Home() {
     [displayProblems],
   );
 
-  const filteredProblems = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+  const continuationScopeProblems = useMemo(() => {
     return displayProblems.filter((problem) => {
       const matchesTopic = topic === "all" || problem.topic === topic;
       const matchesDifficulty = difficultyFilter === "all" || problem.difficulty === difficultyFilter;
+      return matchesTopic && matchesDifficulty;
+    }).sort((first, second) => difficultyOrder[first.difficulty] - difficultyOrder[second.difficulty]);
+  }, [difficultyFilter, displayProblems, topic]);
+  const scopedProblems = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return continuationScopeProblems.filter((problem) => {
       const matchesSearch =
         !keyword ||
         String(problem.id).includes(keyword) ||
         problem.title.toLowerCase().includes(keyword) ||
         problem.topic.toLowerCase().includes(keyword);
-      return matchesTopic && matchesDifficulty && matchesSearch;
-    }).sort((first, second) => difficultyOrder[first.difficulty] - difficultyOrder[second.difficulty]);
-  }, [difficultyFilter, displayProblems, search, topic]);
+      return matchesSearch;
+    });
+  }, [continuationScopeProblems, search]);
+  const statusCounts = useMemo(
+    () => practiceStatusCounts(scopedProblems, records),
+    [records, scopedProblems],
+  );
+  const filteredProblems = useMemo(
+    () => filterProblemsByStatus(scopedProblems, records, statusFilter),
+    [records, scopedProblems, statusFilter],
+  );
+  const recommendedLibraryProblemId = recommendedPracticeProblemId(continuationScopeProblems, records, currentProblem.id);
+  const recommendedLibraryProblem = recommendedLibraryProblemId
+    ? continuationScopeProblems.find((problem) => problem.id === recommendedLibraryProblemId)
+    : undefined;
+  const recommendedLibraryStatus = recommendedLibraryProblem
+    ? practiceRecordStatus(records[recommendedLibraryProblem.id])
+    : null;
+  const hasPracticeScopeFilters = Boolean(search.trim()) || topic !== "all" || difficultyFilter !== "all";
+  const activeStatusLabel = statusFilter === "all" ? copy.allStatuses : copy.statusLabels[statusFilter];
+  const currentProblemVisible = filteredProblems.some((problem) => problem.id === currentProblem.id);
+  const completionRecommendationScope = continuationScopeProblems.filter((problem) => problem.id !== currentProblem.id);
+  const nextProblemId = recommendedPracticeProblemId(completionRecommendationScope, records, currentProblem.id);
+  const nextPracticeProblem = nextProblemId
+    ? displayProblems.find((problem) => problem.id === nextProblemId)
+    : undefined;
 
-  const solvedCount = displayProblems.filter((problem) => records[problem.id]?.status === "solved").length;
-  const learningCount = displayProblems.filter((problem) => records[problem.id]?.status === "learning").length;
+  const fullStatusCounts = useMemo(
+    () => practiceStatusCounts(displayProblems, records),
+    [displayProblems, records],
+  );
+  const solvedCount = fullStatusCounts.solved;
+  const learningCount = fullStatusCounts.learning;
+  const allProblemsMastered = solvedCount === displayProblems.length;
   const progress = Math.round((solvedCount / displayProblems.length) * 100);
 
   useEffect(() => {
@@ -1350,6 +1415,40 @@ export default function Home() {
     focusPracticeStart();
   }
 
+  function focusLibraryAfterFilterReset() {
+    window.requestAnimationFrame(() => {
+      libraryHeadingRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      libraryHeadingRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  function clearPracticeFilters() {
+    setSearch("");
+    setTopic("all");
+    setDifficultyFilter("all");
+    setStatusFilter("all");
+    focusLibraryAfterFilterReset();
+  }
+
+  function clearPracticeStatusFilter() {
+    setStatusFilter("all");
+    focusLibraryAfterFilterReset();
+  }
+
+  function showCurrentProblemInLibrary() {
+    setSearch("");
+    setTopic("all");
+    setDifficultyFilter(currentProblem.difficulty);
+    setStatusFilter(practiceRecordStatus(records[currentProblem.id]));
+    focusLibraryAfterFilterReset();
+  }
+
+  function openRecommendedPractice() {
+    if (studyEditingBlocked || !recommendedLibraryProblem || !recommendedLibraryStatus) return;
+    if (recommendedLibraryStatus === "todo") updateProblemStatus(recommendedLibraryProblem.id, "learning");
+    chooseProblem(recommendedLibraryProblem.id);
+  }
+
   function showAppMode(nextMode: AppMode) {
     void playSelectionHaptic();
     if (nextMode === "workspace") void loadCodeEditor();
@@ -1684,7 +1783,10 @@ export default function Home() {
   function updateLineNote(index: number, value: string) {
     const next = [...currentRecord.lineNotes];
     next[index] = value;
-    updateRecord({ lineNotes: next });
+    updateRecord({
+      lineNotes: next,
+      status: practiceStatusAfterActivity(currentRecord.status, "edit"),
+    });
   }
 
   function selectCodeLine(lineNumber: number) {
@@ -1735,7 +1837,7 @@ export default function Home() {
     const existing = currentRecord.mistakes.trim();
     updateRecord({
       mistakes: existing.includes(note) ? existing : [existing, note].filter(Boolean).join("\n\n"),
-      status: currentRecord.status === "solved" ? "solved" : "learning",
+      status: practiceStatusAfterActivity(currentRecord.status, "edit"),
     });
     setNoteTab("review");
     openNotesDrawer();
@@ -1744,6 +1846,7 @@ export default function Home() {
   function fillLineNotes() {
     updateRecord({
       lineNotes: suggestedLineNotes.map((suggestion, index) => currentRecord.lineNotes[index] || suggestion),
+      status: practiceStatusAfterActivity(currentRecord.status, "edit"),
     });
   }
 
@@ -1781,7 +1884,7 @@ export default function Home() {
   function resetCode() {
     if (!window.confirm(copy.resetConfirm)) return;
     cancelActiveRun();
-    updateRecord({ code: currentProblem.starterCode, lineNotes: [], status: "todo" });
+    updateRecord({ code: currentProblem.starterCode, lineNotes: [] });
     setStarterPromptLine(null);
     setCoreIdeaLocation(null);
     setNoteLineMode("current");
@@ -1830,6 +1933,7 @@ export default function Home() {
           ...previousRecord,
           code: nextCode,
           lineNotes: syncLineNotes(previousRecord.code, nextCode, previousRecord.lineNotes, lineNoteEdit),
+          status: practiceStatusAfterActivity(previousRecord.status, "edit"),
         },
       };
     });
@@ -1861,7 +1965,7 @@ export default function Home() {
     setStarterPromptLine(null);
     setCoreIdeaLocation((current) => current === "problem" ? current : null);
     setRunState({ phase: "running", message: copy.loadingPython, results: [] });
-    updateRecord({ status: currentRecord.status === "solved" ? "solved" : "learning" });
+    updateRecord({ status: practiceStatusAfterActivity(currentRecord.status, "run") });
 
     function cleanupWorkerListeners() {
       worker.removeEventListener("message", handleWorkerMessage);
@@ -2186,7 +2290,9 @@ export default function Home() {
             <div className="section-kicker">LEARNING MAP</div>
             <div className="library-title-row">
               <h1 ref={libraryHeadingRef} tabIndex={-1}>{libraryTitle}</h1>
-              <span>{copy.questionCount(filteredProblems.length)}</span>
+              <span role="status" aria-live="polite" aria-atomic="true">
+                {copy.resultSummary(activeStatusLabel, filteredProblems.length)}
+              </span>
             </div>
             <label className="search-field">
               <span aria-hidden="true">⌕</span>
@@ -2211,12 +2317,63 @@ export default function Home() {
               <div><strong>{learningCount}</strong><span>{copy.learning}</span></div>
               <div><strong>{displayProblems.length - solvedCount}</strong><span>{copy.notMastered}</span></div>
             </div>
+            <div className={ideStyles.libraryStatusFilters}>
+              <span>{copy.statusFilter}</span>
+              <div role="group" aria-label={copy.statusFilterLabel}>
+                {PRACTICE_STATUS_FILTERS.map((status) => {
+                  const label = status === "all" ? copy.allStatuses : copy.statusLabels[status];
+                  return (
+                    <button
+                      type="button"
+                      key={status}
+                      aria-pressed={statusFilter === status}
+                      className={statusFilter === status ? ideStyles.libraryFilterActive : ""}
+                      onClick={() => setStatusFilter(status)}
+                    >
+                      <span>{label}</span><b>{statusCounts[status]}</b>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className={ideStyles.libraryContinueCard}>
+              <div>
+                <strong>{copy.continuePractice}</strong>
+                <small>{copy.continueRule}</small>
+              </div>
+              {recommendedLibraryProblem && recommendedLibraryStatus ? (
+                <button
+                  type="button"
+                  disabled={studyEditingBlocked}
+                  aria-label={`${copy.continueProblem(recommendedLibraryStatus, recommendedLibraryProblem.id, recommendedLibraryProblem.title)} · ${copy.statusLabels[recommendedLibraryStatus]}`}
+                  onClick={openRecommendedPractice}
+                >
+                  <span>{copy.continueProblem(recommendedLibraryStatus, recommendedLibraryProblem.id, recommendedLibraryProblem.title)}</span>
+                  <small>{copy.statusLabels[recommendedLibraryStatus]} <span aria-hidden="true">→</span></small>
+                </button>
+              ) : (
+                <div className={ideStyles.libraryScopeComplete}>
+                  <span>{allProblemsMastered ? copy.allProblemsComplete : scopedProblems.length ? copy.scopeComplete : copy.noMatch}</span>
+                  {allProblemsMastered ? (
+                    <button type="button" onClick={returnToStudyHome}>{copy.backToStudyHome}</button>
+                  ) : hasPracticeScopeFilters && (
+                    <button type="button" onClick={clearPracticeFilters}>{copy.clearFilters}</button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
+
+          {filteredProblems.length > 0 && !currentProblemVisible && (
+            <div className={ideStyles.currentProblemHidden} role="note">
+              <span>{copy.currentProblemHidden(currentProblem.id, currentProblem.title)}</span>
+              <button type="button" onClick={showCurrentProblemInLibrary}>{copy.showCurrentProblem}</button>
+            </div>
+          )}
 
           <nav className="problem-list" aria-label={libraryTitle}>
             {filteredProblems.length ? filteredProblems.map((problem) => {
-              const record = records[problem.id];
-              const status = record?.status ?? "todo";
+              const status = practiceRecordStatus(records[problem.id]);
               return (
                 <button
                   type="button"
@@ -2237,7 +2394,12 @@ export default function Home() {
                 </button>
               );
             }) : (
-              <div className="empty-list">{copy.noMatch}</div>
+              <div className={`empty-list ${ideStyles.libraryEmpty}`}>
+                <p>{scopedProblems.length ? copy.noStatusMatch(activeStatusLabel) : copy.noMatch}</p>
+                <button type="button" onClick={scopedProblems.length ? clearPracticeStatusFilter : clearPracticeFilters}>
+                  {scopedProblems.length ? copy.showAllStatuses : copy.clearFilters}
+                </button>
+              </div>
             )}
           </nav>
 
@@ -2667,17 +2829,17 @@ export default function Home() {
               <label>
                 <span><b>1</b> {copy.thinkingTitle}</span>
                 <small>{copy.thinkingHelp}</small>
-                <textarea rows={6} value={currentRecord.thinking} onChange={(event) => updateRecord({ thinking: event.target.value })} placeholder={copy.thinkingPlaceholder} />
+                <textarea rows={6} value={currentRecord.thinking} onChange={(event) => updateRecord({ thinking: event.target.value, status: practiceStatusAfterActivity(currentRecord.status, "edit") })} placeholder={copy.thinkingPlaceholder} />
               </label>
               <label>
                 <span><b>2</b> {copy.mistakesTitle}</span>
                 <small>{copy.mistakesHelp}</small>
-                <textarea rows={5} value={currentRecord.mistakes} onChange={(event) => updateRecord({ mistakes: event.target.value })} placeholder={copy.mistakesPlaceholder} />
+                <textarea rows={5} value={currentRecord.mistakes} onChange={(event) => updateRecord({ mistakes: event.target.value, status: practiceStatusAfterActivity(currentRecord.status, "edit") })} placeholder={copy.mistakesPlaceholder} />
               </label>
               <label>
                 <span><b>3</b> {copy.reviewTitle}</span>
                 <small>{copy.reviewHelp}</small>
-                <textarea ref={recognitionSignalRef} rows={5} value={currentRecord.review} onChange={(event) => updateRecord({ review: event.target.value })} placeholder={copy.reviewPlaceholder} />
+                <textarea ref={recognitionSignalRef} rows={5} value={currentRecord.review} onChange={(event) => updateRecord({ review: event.target.value, status: practiceStatusAfterActivity(currentRecord.status, "edit") })} placeholder={copy.reviewPlaceholder} />
               </label>
             </div>
           )}
