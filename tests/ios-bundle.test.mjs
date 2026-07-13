@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 const file = (path) => new URL(path, root);
 
 test("the iOS bundle is local, branded independently, and App Store ready", async () => {
-  const [html, nativeHtml, configSource, nativeConfig, worker, privacyManifest, packageSwift] = await Promise.all([
+  const [html, nativeHtml, configSource, nativeConfig, worker, privacyManifest, packageSwift, infoPlist] = await Promise.all([
     readFile(file("dist/client/index.html"), "utf8"),
     readFile(file("ios/App/App/public/index.html"), "utf8"),
     readFile(file("capacitor.config.ts"), "utf8"),
@@ -14,6 +14,7 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
     readFile(file("ios/App/App/public/python-worker.js"), "utf8"),
     readFile(file("ios/App/App/PrivacyInfo.xcprivacy"), "utf8"),
     readFile(file("ios/App/CapApp-SPM/Package.swift"), "utf8"),
+    readFile(file("ios/App/App/Info.plist"), "utf8"),
   ]);
 
   assert.match(html, /class="app-shell is-native-app"/);
@@ -34,9 +35,16 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
 
   assert.match(privacyManifest, /NSPrivacyAccessedAPICategoryUserDefaults/);
   assert.match(privacyManifest, /CA92\.1/);
+  assert.match(privacyManifest, /NSPrivacyAccessedAPICategoryFileTimestamp/);
+  assert.match(privacyManifest, /C617\.1/);
   assert.match(packageSwift, /CapacitorLocalNotifications/);
   assert.match(packageSwift, /CapacitorPreferences/);
   assert.match(packageSwift, /CapacitorShare/);
+  assert.match(packageSwift, /CapacitorFilesystem/);
+  assert.match(packageSwift, /CapgoCapacitorSpeechRecognition/);
+  assert.match(infoPlist, /NSMicrophoneUsageDescription/);
+  assert.match(infoPlist, /NSSpeechRecognitionUsageDescription/);
+  assert.match(infoPlist, /不会保存录音/);
 
   await assert.rejects(stat(file("ios/App/App/public/sw.js")), { code: "ENOENT" });
   await assert.rejects(stat(file("ios/App/App/public/manifest.webmanifest")), { code: "ENOENT" });

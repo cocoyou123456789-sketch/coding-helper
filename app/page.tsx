@@ -10,6 +10,9 @@ import {
   type EditorEdit,
   type LineNoteEdit,
 } from "./code-editor";
+import CourseNotes from "./course-notes";
+import courseStyles from "./course-notes.module.css";
+import { COURSE_NOTES_STORAGE_KEY } from "./course-notes-model";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import {
   clearStoredStudyData,
@@ -92,6 +95,7 @@ const pageCopy = {
     nativeAutosave: "代码和笔记已保存在这台设备",
     freePractice: "完整题练习",
     learningPath: "学习首页",
+    courseNotes: "课程笔记",
     appNavigation: "主要页面",
     mobileProblemList: "选题",
     mobileCode: "原题 + 代码",
@@ -226,6 +230,7 @@ const pageCopy = {
     nativeAutosave: "Code and notes are saved on this device",
     freePractice: "Full Practice",
     learningPath: "Study Home",
+    courseNotes: "Course Notes",
     appNavigation: "Main pages",
     mobileProblemList: "Choose",
     mobileCode: "Prompt + Code",
@@ -453,7 +458,7 @@ export default function Home() {
   const [showGuide, setShowGuide] = useState(false);
   const [showStatement, setShowStatement] = useState(true);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
-  const [appMode, setAppMode] = useState<"path" | "workspace">("path");
+  const [appMode, setAppMode] = useState<"path" | "workspace" | "course">("path");
   const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<"library" | "code" | "notes">("library");
   const [profile, setProfile] = useState<LearningProfile>(EMPTY_PROFILE);
   const [showNativeSettings, setShowNativeSettings] = useState(false);
@@ -533,7 +538,7 @@ export default function Home() {
           setRunState({ phase: "idle", message: pageCopy[savedLanguage].notRun, results: [] });
         }
         const requestedMode = new URLSearchParams(window.location.search).get("mode");
-        if (requestedMode === "path" || requestedMode === "workspace") {
+        if (requestedMode === "path" || requestedMode === "workspace" || requestedMode === "course") {
           setAppMode(requestedMode);
           if (requestedMode === "workspace") setMobileWorkspaceTab("library");
         }
@@ -674,7 +679,7 @@ export default function Home() {
     setMobileWorkspaceTab("code");
   }
 
-  function showAppMode(nextMode: "path" | "workspace") {
+  function showAppMode(nextMode: "path" | "workspace" | "course") {
     void playSelectionHaptic();
     setAppMode(nextMode);
     if (nextMode === "workspace" && appMode !== "workspace") setMobileWorkspaceTab("library");
@@ -745,7 +750,8 @@ export default function Home() {
 
   async function handleDeleteStudyData() {
     if (!window.confirm(copy.deleteConfirm)) return;
-    await clearStoredStudyData([STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY]);
+    setAppMode("path");
+    await clearStoredStudyData([STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY, COURSE_NOTES_STORAGE_KEY]);
     setRecords({});
     setSelectedId(problems[0].id);
     setProfile(EMPTY_PROFILE);
@@ -753,7 +759,6 @@ export default function Home() {
     setLanguage("zh");
     setDailyReminder({ enabled: false, time: "20:00" });
     setRunState({ phase: "idle", message: pageCopy.zh.notRun, results: [] });
-    setAppMode("path");
     setReminderMessage(pageCopy.zh.deleteDone);
     void playTestHaptic(true);
   }
@@ -952,7 +957,7 @@ export default function Home() {
 
   return (
     <main className={`app-shell ${nativeApp ? "is-native-app" : ""}`}>
-      <header className="site-header">
+      <header className={`site-header ${courseStyles.courseNavigationHeader}`}>
         <div className="brand-block">
           <span className="brand-mark" aria-hidden="true">{"{ }"}</span>
           <div>
@@ -975,6 +980,7 @@ export default function Home() {
           <nav className="app-mode-nav" aria-label={copy.appNavigation}>
             <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
             <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
+            <button type="button" className={appMode === "course" ? "is-active" : ""} aria-current={appMode === "course" ? "page" : undefined} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
           </nav>
           <div className="language-toggle" role="group" aria-label="Language / 语言">
             <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} onClick={() => selectLanguage("zh")}>中文</button>
@@ -1034,6 +1040,8 @@ export default function Home() {
           onOpenProblem={openProblemFromPath}
           onSprintBest={updateSprintBest}
         />
+      ) : appMode === "course" ? (
+        <CourseNotes language={language} nativeApp={nativeApp} />
       ) : (
         <div className="workspace">
         <section className="practice-workspace-header" aria-labelledby="practice-workspace-title">

@@ -1,5 +1,6 @@
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { Preferences } from "@capacitor/preferences";
@@ -9,6 +10,10 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 const IS_NATIVE_BUILD = process.env.NEXT_PUBLIC_NATIVE_APP === "true";
 const REMINDER_KEY = "tijiebu-daily-reminder-v1";
 const DAILY_REMINDER_ID = 771201;
+const LARGE_STORAGE_DATABASE = "tijiebu-study-files-v1";
+const LARGE_STORAGE_OBJECT_STORE = "documents";
+const LARGE_STORAGE_DIRECTORY = "study-notes";
+export const STUDY_DATA_CLEAR_EVENT = "tijiebu:clear-study-data";
 
 export type DailyReminder = {
   enabled: boolean;
@@ -60,6 +65,135 @@ export async function setStoredValue(key: string, value: string): Promise<void> 
     await Preferences.set({ key, value });
   } catch {
     window.localStorage.setItem(key, value);
+  }
+}
+
+function openLargeStorageDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(LARGE_STORAGE_DATABASE, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(LARGE_STORAGE_OBJECT_STORE)) {
+        request.result.createObjectStore(LARGE_STORAGE_OBJECT_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readLargeWebValue(key: string): Promise<string | null> {
+  const database = await openLargeStorageDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const request = database
+        .transaction(LARGE_STORAGE_OBJECT_STORE, "readonly")
+        .objectStore(LARGE_STORAGE_OBJECT_STORE)
+        .get(key);
+      request.onsuccess = () => resolve(typeof request.result === "string" ? request.result : null);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function writeLargeWebValue(key: string, value: string): Promise<void> {
+  const database = await openLargeStorageDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(LARGE_STORAGE_OBJECT_STORE, "readwrite");
+      transaction.objectStore(LARGE_STORAGE_OBJECT_STORE).put(value, key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function deleteLargeWebValue(key: string): Promise<void> {
+  const database = await openLargeStorageDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(LARGE_STORAGE_OBJECT_STORE, "readwrite");
+      transaction.objectStore(LARGE_STORAGE_OBJECT_STORE).delete(key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+function largeStoragePath(key: string): string {
+  return `${LARGE_STORAGE_DIRECTORY}/${encodeURIComponent(key)}.json`;
+}
+
+export async function getLargeStoredValue(key: string): Promise<string | null> {
+  try {
+    if (hasNativeBridge()) {
+      const result = await Filesystem.readFile({
+        path: largeStoragePath(key),
+        directory: Directory.LibraryNoCloud,
+        encoding: Encoding.UTF8,
+      });
+      return typeof result.data === "string" ? result.data : null;
+    }
+    if (typeof window.indexedDB !== "undefined") {
+      const value = await readLargeWebValue(key);
+      if (value !== null) return value;
+    }
+  } catch {
+    // Missing files and unavailable IndexedDB fall through to the legacy store.
+  }
+
+  const legacyValue = await getStoredValue(key);
+  if (legacyValue !== null) {
+    await setLargeStoredValue(key, legacyValue).catch(() => undefined);
+  }
+  return legacyValue;
+}
+
+export async function setLargeStoredValue(key: string, value: string): Promise<void> {
+  try {
+    if (hasNativeBridge()) {
+      await Filesystem.mkdir({
+        path: LARGE_STORAGE_DIRECTORY,
+        directory: Directory.LibraryNoCloud,
+        recursive: true,
+      }).catch(() => undefined);
+      await Filesystem.writeFile({
+        path: largeStoragePath(key),
+        data: value,
+        directory: Directory.LibraryNoCloud,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+      await Preferences.remove({ key }).catch(() => undefined);
+      window.localStorage.removeItem(key);
+      return;
+    }
+    if (typeof window.indexedDB !== "undefined") {
+      await writeLargeWebValue(key, value);
+      window.localStorage.removeItem(key);
+      return;
+    }
+  } catch {
+    // A small local fallback keeps notes usable when file or database storage is unavailable.
+  }
+  await setStoredValue(key, value);
+}
+
+async function removeLargeStoredValue(key: string): Promise<void> {
+  if (hasNativeBridge()) {
+    await Filesystem.deleteFile({
+      path: largeStoragePath(key),
+      directory: Directory.LibraryNoCloud,
+    }).catch(() => undefined);
+  } else if (typeof window.indexedDB !== "undefined") {
+    await deleteLargeWebValue(key).catch(() => undefined);
   }
 }
 
@@ -166,12 +300,14 @@ export async function openExternalPage(url: string): Promise<void> {
 }
 
 export async function clearStoredStudyData(keys: string[]): Promise<void> {
+  window.dispatchEvent(new Event(STUDY_DATA_CLEAR_EVENT));
   try {
     await LocalNotifications.cancel({ notifications: [{ id: DAILY_REMINDER_ID }] });
   } catch {
     // Clearing local study data should still work if no reminder was scheduled.
   }
 
+  await Promise.all(keys.map((key) => removeLargeStoredValue(key)));
   if (hasNativeBridge()) {
     await Promise.all([...keys, REMINDER_KEY].map((key) => Preferences.remove({ key }).catch(() => undefined)));
   }

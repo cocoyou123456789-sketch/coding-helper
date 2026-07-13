@@ -44,10 +44,12 @@ test("renders the Hot 100 learning workspace", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
-test("ships 100 problems, the Python runner, and Pages workflow", async () => {
-  const [problemSource, pageSource, pwaSource, detailA, detailB, detailC, englishA, englishB, englishC, workerSource, serviceWorkerSource, manifestSource, workflowSource] = await Promise.all([
+test("ships 100 problems, course dictation, the Python runner, and Pages workflow", async () => {
+  const [problemSource, pageSource, courseSource, speechSource, pwaSource, detailA, detailB, detailC, englishA, englishB, englishC, workerSource, serviceWorkerSource, manifestSource, workflowSource] = await Promise.all([
     readFile(new URL("../app/problems.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/course-notes.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/speech-notes.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/pwa-installer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-details-a.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-details-b.ts", import.meta.url), "utf8"),
@@ -68,7 +70,7 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.match(englishA, /title: "Two Sum"/);
   assert.match(problemSource, /id: 32, title: "最长有效括号"/);
   assert.match(pageSource, /运行测试/);
-  assert.match(pageSource, /逐行解释/);
+  assert.match(pageSource, /逐行解释|每一行代码是什么意思/);
   assert.match(pageSource, /在力扣查看官方原题/);
   assert.match(pageSource, /完整题目练习工作台/);
   assert.match(pageSource, /原题 \+ 代码/);
@@ -79,6 +81,14 @@ test("ships 100 problems, the Python runner, and Pages workflow", async () => {
   assert.match(pageSource, /wrap="off"/);
   assert.match(pageSource, /Enter 自动缩进/);
   assert.match(pageSource, /editForEnter/);
+  assert.match(pageSource, /课程笔记/);
+  assert.match(pageSource, /CourseNotes/);
+  assert.match(courseSource, /加载官方课程播放器/);
+  assert.match(courseSource, /开始听写/);
+  assert.match(courseSource, /不下载视频/);
+  assert.match(courseSource, /loading="lazy"/);
+  assert.match(speechSource, /webkitSpeechRecognition/);
+  assert.match(speechSource, /NativeSpeechRecognition/);
   assert.match(pwaSource, /serviceWorker\.register/);
   assert.match(pwaSource, /安装 App/);
   assert.match(workerSource, /Pyodide/);

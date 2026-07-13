@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 const components = [
   ["Capacitor", "MIT License", "https://github.com/ionic-team/capacitor"],
+  ["Capgo Speech Recognition", "Mozilla Public License 2.0", "https://github.com/Cap-go/capacitor-speech-recognition"],
   ["Pyodide", "Mozilla Public License 2.0", "https://github.com/pyodide/pyodide"],
   ["CPython", "Python Software Foundation License", "https://docs.python.org/3/license.html"],
   ["React", "MIT License", "https://github.com/facebook/react"],

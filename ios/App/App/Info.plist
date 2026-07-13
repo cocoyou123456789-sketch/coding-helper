@@ -24,6 +24,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于在你主动开始听写时，把口述内容转换为学习笔记；题解簿不会保存录音。 Used only after you start dictation to turn speech into study notes; the app does not save audio.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>用于把你主动开始的听写转换为可编辑文字；旧版 iOS 可能由 Apple 语音服务处理。 Used to turn dictation you start into editable text; older iOS versions may use Apple speech services.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
