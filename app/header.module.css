@@ -13,6 +13,24 @@
   text-align: center;
 }
 
+.restoreNotice {
+  background: #fff7f9;
+  border: 1px solid #e5a9ba;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(116, 40, 67, 0.14);
+  color: #7d2441;
+  font-size: max(14px, 0.76rem);
+  font-weight: 700;
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  padding: 9px 14px;
+  pointer-events: none;
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 82px);
+  transform: translateX(-50%);
+  z-index: 1000;
+}
+
 .saveSaving i {
   animation: save-pulse 900ms ease-in-out infinite alternate;
   background: #d29a36;

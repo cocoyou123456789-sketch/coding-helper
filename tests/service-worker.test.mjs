@@ -56,3 +56,24 @@ test("install caching follows nested deferred JavaScript and CSS", async () => {
 
   assert.deepEqual(cached.sort(), [...sources.keys()].sort());
 });
+
+test("offline navigation with deep-link query uses the cached app shell", async () => {
+  const cacheMatches = [];
+  const context = workerContext(async () => {
+    throw new Error("offline");
+  });
+  context.caches.open = async () => ({
+    async match(request, options) {
+      cacheMatches.push({ request: String(request.url ?? request), ignoreSearch: options?.ignoreSearch === true });
+      return options?.ignoreSearch ? new Response("cached app shell", { status: 200 }) : undefined;
+    },
+  });
+
+  const response = await context.networkFirst(new Request(`${scope}?mode=workspace&problem=283`));
+
+  assert.equal(await response.text(), "cached app shell");
+  assert.deepEqual(cacheMatches, [{
+    request: `${scope}?mode=workspace&problem=283`,
+    ignoreSearch: true,
+  }]);
+});

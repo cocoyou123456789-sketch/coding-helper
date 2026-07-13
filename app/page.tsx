@@ -10,6 +10,12 @@ import headerStyles from "./header.module.css";
 import type { LeetCodeCodeEditorHandle } from "./leetcode-code-editor";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import {
+  navigationHref,
+  parseNavigationState,
+  type AppMode,
+  type NavigationState,
+} from "./navigation-state";
+import {
   clearStoredStudyData,
   configureNativeAppearance,
   getStoredValue,
@@ -78,6 +84,22 @@ const LICENSES_URL = "https://cocoyou123456789-sketch.github.io/coding-helper/li
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 24;
 const DEFAULT_FONT_SIZE = 18;
+const KNOWN_PROBLEM_IDS = new Set(problems.map((problem) => problem.id));
+
+function writeNavigationState(nextNavigation: NavigationState, action: "push" | "replace") {
+  const nextHref = navigationHref(window.location.href, nextNavigation);
+  const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextHref === currentHref) return;
+  if (action === "push") {
+    window.history.pushState(nextNavigation, "", nextHref);
+  } else {
+    window.history.replaceState(nextNavigation, "", nextHref);
+  }
+}
+
+function replaceNavigationState(nextNavigation: NavigationState) {
+  writeNavigationState(nextNavigation, "replace");
+}
 
 const EMPTY_PROFILE: LearningProfile = {
   xp: 0,
@@ -519,7 +541,7 @@ export default function Home() {
   const [showProblemList, setShowProblemList] = useState(false);
   const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
-  const [appMode, setAppMode] = useState<"path" | "workspace" | "course">("path");
+  const [appMode, setAppMode] = useState<AppMode>("path");
   const [mobileWorkspaceTab, setMobileWorkspaceTab] = useState<"library" | "code" | "notes">("library");
   const [profile, setProfile] = useState<LearningProfile>(EMPTY_PROFILE);
   const [showNativeSettings, setShowNativeSettings] = useState(false);
@@ -602,6 +624,15 @@ export default function Home() {
 
     async function loadSavedStudy() {
       try {
+        let requestedNavigation = parseNavigationState(window.location.search, KNOWN_PROBLEM_IDS);
+        if (requestedNavigation.mode === "workspace") void loadCodeEditor();
+        if (requestedNavigation.mode === "course") void loadCourseNotes();
+        setAppMode(requestedNavigation.mode);
+        if (requestedNavigation.mode === "workspace") {
+          setMobileWorkspaceTab(requestedNavigation.problemId ? "code" : "library");
+          if (requestedNavigation.problemId) setSelectedId(requestedNavigation.problemId);
+        }
+
         await configureNativeAppearance();
         const [savedLanguage, saved, savedFontSizeValue, savedProfile, savedReminder] = await Promise.all([
           getStoredValue(LANGUAGE_KEY),
@@ -616,18 +647,21 @@ export default function Home() {
           setLanguage(savedLanguage);
           setRunState({ phase: "idle", message: pageCopy[savedLanguage].notRun, results: [] });
         }
-        const requestedMode = new URLSearchParams(window.location.search).get("mode");
-        if (requestedMode === "path" || requestedMode === "workspace" || requestedMode === "course") {
-          if (requestedMode === "workspace") void loadCodeEditor();
-          if (requestedMode === "course") void loadCourseNotes();
-          setAppMode(requestedMode);
-          if (requestedMode === "workspace") setMobileWorkspaceTab("library");
-        }
+        requestedNavigation = parseNavigationState(window.location.search, KNOWN_PROBLEM_IDS);
+        let savedSelectedId: number | undefined;
         if (saved) {
           const normalized = normalizeSavedStudy(parseStoredJson(saved), problems);
           setRecords(normalized.records);
-          if (normalized.selectedId) setSelectedId(normalized.selectedId);
+          savedSelectedId = normalized.selectedId;
         }
+        const resolvedSelectedId = requestedNavigation.mode === "workspace" && requestedNavigation.problemId
+          ? requestedNavigation.problemId
+          : savedSelectedId ?? problems[0].id;
+        setSelectedId(resolvedSelectedId);
+        replaceNavigationState({
+          mode: requestedNavigation.mode,
+          problemId: requestedNavigation.mode === "workspace" ? resolvedSelectedId : undefined,
+        });
         const savedFontSize = Number(savedFontSizeValue);
         if (Number.isInteger(savedFontSize) && savedFontSize >= MIN_FONT_SIZE && savedFontSize <= MAX_FONT_SIZE) {
           setFontSize(savedFontSize);
@@ -652,6 +686,41 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    function restoreNavigationFromHistory() {
+      const navigation = parseNavigationState(window.location.search, KNOWN_PROBLEM_IDS);
+      if (navigation.mode === "workspace") void loadCodeEditor();
+      if (navigation.mode === "course") void loadCourseNotes();
+
+      activeRunRef.current?.cleanup();
+      activeRunRef.current = null;
+      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      runtimeReadyRef.current = false;
+
+      setAppMode(navigation.mode);
+      if (navigation.problemId) setSelectedId(navigation.problemId);
+      setRunState({
+        phase: "idle",
+        message: document.documentElement.lang.startsWith("en") ? pageCopy.en.notRun : pageCopy.zh.notRun,
+        results: [],
+      });
+      setNoteTab("line");
+      setNoteLineMode("current");
+      setActiveCodeLine(1);
+      setShowStatement(true);
+      setShowProblemList(false);
+      setShowNotesDrawer(false);
+      setMobileWorkspaceTab(navigation.mode === "workspace" && navigation.problemId ? "code" : "library");
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+    }
+
+    window.addEventListener("popstate", restoreNavigationFromHistory);
+    return () => window.removeEventListener("popstate", restoreNavigationFromHistory);
   }, []);
 
   useEffect(() => {
@@ -852,16 +921,19 @@ export default function Home() {
 
   function openProblemFromPath(id: number) {
     void loadCodeEditor();
-    chooseProblem(id);
+    chooseProblem(id, false);
     setAppMode("workspace");
+    writeNavigationState({ mode: "workspace", problemId: id }, "push");
     setMobileWorkspaceTab("code");
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
-  function chooseProblem(id: number) {
+  function chooseProblem(id: number, updateHistory = true) {
+    if (!KNOWN_PROBLEM_IDS.has(id)) return;
     void playSelectionHaptic();
     cancelActiveRun();
     setSelectedId(id);
+    if (updateHistory) writeNavigationState({ mode: "workspace", problemId: id }, "push");
     setRunState({ phase: "idle", message: copy.notRun, results: [] });
     setNoteTab("line");
     setNoteLineMode("current");
@@ -872,12 +944,16 @@ export default function Home() {
     window.requestAnimationFrame(() => codeEditorRef.current?.focus());
   }
 
-  function showAppMode(nextMode: "path" | "workspace" | "course") {
+  function showAppMode(nextMode: AppMode) {
     void playSelectionHaptic();
     if (nextMode === "workspace") void loadCodeEditor();
     if (nextMode === "course") void loadCourseNotes();
     if (nextMode !== "workspace") cancelActiveRun();
     setAppMode(nextMode);
+    writeNavigationState({
+      mode: nextMode,
+      problemId: nextMode === "workspace" ? selectedId : undefined,
+    }, "push");
     setShowProblemList(false);
     setShowNotesDrawer(false);
     if (nextMode === "workspace" && appMode !== "workspace") setMobileWorkspaceTab("library");
@@ -948,6 +1024,7 @@ export default function Home() {
   async function handleDeleteStudyData() {
     if (!window.confirm(copy.deleteConfirm)) return;
     setAppMode("path");
+    replaceNavigationState({ mode: "path" });
     await clearStoredStudyData([STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY, COURSE_NOTES_STORAGE_KEY]);
     setRecords({});
     setSelectedId(problems[0].id);
@@ -1209,6 +1286,13 @@ export default function Home() {
         </div>
       )}
 
+      {!hydrated && (
+        <div className={headerStyles.restoreNotice} role="status" aria-live="polite">
+          {language === "zh" ? "正在恢复这台设备上的学习记录…" : "Restoring study data on this device…"}
+        </div>
+      )}
+
+      <div inert={!hydrated} aria-busy={!hydrated}>
       {appMode === "path" ? (
         <LearningHub
           problems={displayProblems}
@@ -1691,6 +1775,7 @@ export default function Home() {
         </aside>
         </div>
       )}
+      </div>
 
       {nativeApp && showNativeSettings && (
         <div className="native-settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNativeSettings(false); }}>
@@ -1748,7 +1833,7 @@ export default function Home() {
                 <li key={title}><b>{index + 1}</b><div><strong>{title}</strong><p>{body}</p></div></li>
               ))}
             </ol>
-            <button className="button button-primary" type="button" onClick={() => { setAppMode("path"); setShowGuide(false); }}>{copy.goToPath}</button>
+            <button className="button button-primary" type="button" onClick={() => { showAppMode("path"); setShowGuide(false); }}>{copy.goToPath}</button>
           </section>
         </div>
       )}
