@@ -149,3 +149,51 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.editorToolbar \{[\s\S]*?position: sticky;[\s\S]*?env\(safe-area-inset-top\)/);
   assert.match(styles, /\.testConsole \{[\s\S]*?scroll-margin-top: calc\(180px \+ env\(safe-area-inset-top\)\)/);
 });
+
+test("image notes and the mistake book are reachable, local, and mobile friendly", async () => {
+  const [page, imagePanel, imageStyles, mistakePanel, mistakeStyles] = await Promise.all([
+    readFile(file("app/page.tsx"), "utf8"),
+    readFile(file("app/note-image-panel.tsx"), "utf8"),
+    readFile(file("app/note-image-panel.module.css"), "utf8"),
+    readFile(file("app/mistake-book-panel.tsx"), "utf8"),
+    readFile(file("app/mistake-book-panel.module.css"), "utf8"),
+  ]);
+
+  assert.match(page, /lazy\(loadNoteImagePanel\)/);
+  assert.match(page, /id="image-notes-tab"/);
+  assert.match(page, /queueNoteImageStoreMutation/);
+  assert.match(page, /lazy\(loadMistakeBookPanel\)/);
+  assert.match(page, /copy\.mistakeBook/);
+  assert.match(page, /currentProblem=\{currentMistakeSeed\}/);
+  assert.match(page, /queueMistakeBookStoreMutation/);
+  assert.match(page, /saveFailedTestToMistakeBook/);
+  assert.match(page, /selectionRequest=\{mistakeBookSelectionRequest\}/);
+  assert.match(page, /setMistakeBookSelectionRequest\(\{/);
+  assert.match(page, /mistakeBookMounted &&/);
+  assert.match(page, /hidden=\{!showMistakeBook\}/);
+  assert.match(page, /setMistakeBookMounted\(true\)/);
+  assert.match(imagePanel, /type="file"/);
+  assert.doesNotMatch(imagePanel, /capture=/);
+  assert.match(imagePanel, /role="dialog"/);
+  assert.match(imagePanel, /maxLength=\{MAX_NOTE_IMAGE_CAPTION_LENGTH\}/);
+  assert.match(imagePanel, /window\.setTimeout\(\(\) => \{ void saveCaption\(\); \}, 400\)/);
+  assert.match(imagePanel, /addEventListener\("pagehide"/);
+  assert.match(imagePanel, /addEventListener\("visibilitychange"/);
+  assert.match(imagePanel, /NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY/);
+  assert.match(imagePanel, /baseCaption/);
+  assert.match(imagePanel, /pending\.baseCaption === image\.caption/);
+  assert.match(imagePanel, /text\.draftConflict/);
+  assert.match(imagePanel, /discardCaptionDraft\(image\.id\)/);
+  assert.match(page, /NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY/);
+  assert.match(imagePanel, /void saveCaptionRef\.current\(\)/);
+  assert.match(imageStyles, /min-height: 44px/);
+  assert.match(imageStyles, /@media \(max-width:/);
+  assert.match(imageStyles, /\.draftConflict button \{[\s\S]*?min-height: 44px/);
+  assert.match(mistakePanel, /导入其他题/);
+  assert.match(mistakePanel, /逐行对比/);
+  assert.match(mistakePanel, /它不是 AI/);
+  assert.match(mistakePanel, /先看右侧标出的/);
+  assert.match(mistakePanel, /onSave\(entry: MistakeEntry\): Promise<void>/);
+  assert.match(mistakeStyles, /@media \(max-width:/);
+  assert.match(mistakeStyles, /min-height: 44px/);
+});

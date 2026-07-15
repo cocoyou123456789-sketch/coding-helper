@@ -831,6 +831,10 @@
   font-size: max(16px, var(--ide-body));
 }
 
+.notesDrawer :global(.note-tabs) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .lineNoteNavigator {
   align-items: center;
   background: #fff8fa;

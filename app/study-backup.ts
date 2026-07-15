@@ -1,13 +1,17 @@
 // @ts-expect-error Node's strip-types test runner needs the explicit source extension.
 import { MAX_COURSES, MAX_COURSE_TEXT_LENGTH, normalizeCourseStore, type CourseStore } from "./course-notes-model.ts";
 // @ts-expect-error Node's strip-types test runner needs the explicit source extension.
+import { emptyNoteImageStore, normalizeNoteImageStore, noteImageStoreIssue, type NoteImageStore } from "./note-images.ts";
+// @ts-expect-error Node's strip-types test runner needs the explicit source extension.
+import { emptyMistakeBookStore, mistakeBookStoreIssue, parseMistakeBookStore, type MistakeBookStore } from "./mistake-book.ts";
+// @ts-expect-error Node's strip-types test runner needs the explicit source extension.
 import { normalizeLearningProfile, normalizeSavedStudy, type StudyRecord, type StudyRecords, STUDY_STORAGE_VERSION } from "./study-storage.ts";
 import type { LearningProfile } from "./learning-hub";
 import type { DailyReminder } from "./native-app";
 import type { Problem } from "./problems";
 
 export const STUDY_BACKUP_FORMAT = "tijiebu-backup";
-export const STUDY_BACKUP_VERSION = 1;
+export const STUDY_BACKUP_VERSION = 3;
 // Twenty courses can legally contain 4,000,000 Chinese characters across
 // transcripts and notes (roughly 12 MB as UTF-8). Keep enough headroom for
 // problem work while still bounding the memory used to parse an import.
@@ -42,6 +46,8 @@ export type StudyBackupSource = {
   language: unknown;
   reminder: unknown;
   course: unknown;
+  noteImages: unknown;
+  mistakeBook: unknown;
 };
 
 export type StudyBackup = {
@@ -54,6 +60,8 @@ export type StudyBackup = {
   language: BackupLanguage;
   reminder: DailyReminder;
   course: CourseStore;
+  noteImages: NoteImageStore;
+  mistakeBook: MistakeBookStore;
 };
 
 export type StudyBackupErrorCode =
@@ -196,21 +204,30 @@ function assertExportSourceFits(source: StudyBackupSource, problemList: Problem[
   }
 
   const course = objectValue(source.course);
-  if (!Array.isArray(course?.courses)) return;
-  if (course.courses.length > MAX_COURSES) {
-    tooLarge("course.courses contains more saved courses than a backup can hold.");
+  if (Array.isArray(course?.courses)) {
+    if (course.courses.length > MAX_COURSES) {
+      tooLarge("course.courses contains more saved courses than a backup can hold.");
+    }
+    course.courses.forEach((rawValue, index) => {
+      const savedCourse = objectValue(rawValue);
+      if (!savedCourse) return;
+      assertOptionalExportText(savedCourse.id, MAX_BACKUP_COURSE_ID_LENGTH, `course.courses[${index}].id`);
+      assertOptionalExportText(savedCourse.videoId, MAX_BACKUP_COURSE_ID_LENGTH, `course.courses[${index}].videoId`);
+      assertOptionalExportText(savedCourse.sourceUrl, MAX_BACKUP_COURSE_URL_LENGTH, `course.courses[${index}].sourceUrl`);
+      assertOptionalExportText(savedCourse.embedUrl, MAX_BACKUP_COURSE_URL_LENGTH, `course.courses[${index}].embedUrl`);
+      assertOptionalExportText(savedCourse.title, MAX_BACKUP_COURSE_TITLE_LENGTH, `course.courses[${index}].title`);
+      assertOptionalExportText(savedCourse.transcript, MAX_COURSE_TEXT_LENGTH, `course.courses[${index}].transcript`);
+      assertOptionalExportText(savedCourse.notes, MAX_COURSE_TEXT_LENGTH, `course.courses[${index}].notes`);
+    });
   }
-  course.courses.forEach((rawValue, index) => {
-    const savedCourse = objectValue(rawValue);
-    if (!savedCourse) return;
-    assertOptionalExportText(savedCourse.id, MAX_BACKUP_COURSE_ID_LENGTH, `course.courses[${index}].id`);
-    assertOptionalExportText(savedCourse.videoId, MAX_BACKUP_COURSE_ID_LENGTH, `course.courses[${index}].videoId`);
-    assertOptionalExportText(savedCourse.sourceUrl, MAX_BACKUP_COURSE_URL_LENGTH, `course.courses[${index}].sourceUrl`);
-    assertOptionalExportText(savedCourse.embedUrl, MAX_BACKUP_COURSE_URL_LENGTH, `course.courses[${index}].embedUrl`);
-    assertOptionalExportText(savedCourse.title, MAX_BACKUP_COURSE_TITLE_LENGTH, `course.courses[${index}].title`);
-    assertOptionalExportText(savedCourse.transcript, MAX_COURSE_TEXT_LENGTH, `course.courses[${index}].transcript`);
-    assertOptionalExportText(savedCourse.notes, MAX_COURSE_TEXT_LENGTH, `course.courses[${index}].notes`);
-  });
+
+  const imageIssue = noteImageStoreIssue(source.noteImages, problemList.map((problem) => problem.id));
+  if (imageIssue?.code === "too-large") tooLarge(`${imageIssue.field} is too large to back up safely.`);
+  if (imageIssue) invalidFormat(`${imageIssue.field} is malformed.`);
+
+  const mistakeIssue = mistakeBookStoreIssue(source.mistakeBook);
+  if (mistakeIssue?.code === "too-large") tooLarge(`${mistakeIssue.field} is too large to back up safely.`);
+  if (mistakeIssue) invalidFormat(`${mistakeIssue.field} is malformed.`);
 }
 
 function normalizeBackupStudy(value: unknown, problemList: Problem[]): BackupStudy {
@@ -339,7 +356,11 @@ function assertCourseSchema(value: unknown): void {
   });
 }
 
-function assertBackupPayloadSchema(envelope: Record<string, unknown>): void {
+function assertBackupPayloadSchema(
+  envelope: Record<string, unknown>,
+  problemList: Problem[] | undefined,
+  backupVersion: 1 | 2 | 3,
+): void {
   const study = objectValue(envelope.study);
   if (!study
     || study.version !== STUDY_STORAGE_VERSION
@@ -377,6 +398,22 @@ function assertBackupPayloadSchema(envelope: Record<string, unknown>): void {
     invalidFormat("reminder is incomplete or malformed.");
   }
   assertCourseSchema(envelope.course);
+  if (backupVersion >= 2) {
+    if (!hasOwn(envelope, "noteImages")) invalidFormat("noteImages is missing.");
+    const imageIssue = noteImageStoreIssue(envelope.noteImages, problemList?.map((problem) => problem.id));
+    if (imageIssue?.code === "too-large") tooLarge(`${imageIssue.field} is too large.`);
+    if (imageIssue) invalidFormat(`${imageIssue.field} is malformed.`);
+  } else if (hasOwn(envelope, "noteImages")) {
+    invalidFormat("Version 1 backups cannot contain image notes.");
+  }
+  if (backupVersion >= 3) {
+    if (!hasOwn(envelope, "mistakeBook")) invalidFormat("mistakeBook is missing.");
+    const mistakeIssue = mistakeBookStoreIssue(envelope.mistakeBook);
+    if (mistakeIssue?.code === "too-large") tooLarge(`${mistakeIssue.field} is too large.`);
+    if (mistakeIssue) invalidFormat(`${mistakeIssue.field} is malformed.`);
+  } else if (hasOwn(envelope, "mistakeBook")) {
+    invalidFormat(`Version ${backupVersion} backups cannot contain a mistake book.`);
+  }
 }
 
 function textByteLength(value: string): number {
@@ -407,6 +444,8 @@ function normalizeBackup(
     language: normalizeLanguage(source.language),
     reminder: normalizeReminder(source.reminder),
     course: normalizeCourseStore(source.course),
+    noteImages: normalizeNoteImageStore(source.noteImages, problemList.map((problem) => problem.id)),
+    mistakeBook: parseMistakeBookStore(source.mistakeBook),
   };
 }
 
@@ -422,14 +461,14 @@ export function createStudyBackup(
 ): StudyBackup {
   assertExportSourceFits(source, problemList);
   const backup = normalizeBackup(source, problemList, isoDate(now));
-  assertBackupPayloadSchema(backup as unknown as Record<string, unknown>);
+  assertBackupPayloadSchema(backup as unknown as Record<string, unknown>, problemList, STUDY_BACKUP_VERSION);
   assertBackupSize(JSON.stringify(backup));
   return backup;
 }
 
 /** Serialize a backup using the same schema and size ceiling enforced during import. */
 export function stringifyStudyBackup(backup: StudyBackup): string {
-  assertBackupPayloadSchema(backup as unknown as Record<string, unknown>);
+  assertBackupPayloadSchema(backup as unknown as Record<string, unknown>, undefined, STUDY_BACKUP_VERSION);
   const text = JSON.stringify(backup);
   assertBackupSize(text);
   return text;
@@ -453,7 +492,7 @@ export function parseStudyBackup(text: string, problemList: Problem[]): StudyBac
   if (!envelope || envelope.format !== STUDY_BACKUP_FORMAT) {
     throw new StudyBackupError("invalid-format", "This is not a Tijiebu study backup.");
   }
-  if (envelope.version !== STUDY_BACKUP_VERSION) {
+  if (envelope.version !== 1 && envelope.version !== 2 && envelope.version !== STUDY_BACKUP_VERSION) {
     throw new StudyBackupError(
       "unsupported-version",
       typeof envelope.version === "number" && envelope.version > STUDY_BACKUP_VERSION
@@ -470,7 +509,8 @@ export function parseStudyBackup(text: string, problemList: Problem[]): StudyBac
     || !hasOwn(envelope, "course")) {
     throw new StudyBackupError("invalid-format", "The backup is incomplete or malformed.");
   }
-  assertBackupPayloadSchema(envelope);
+  const sourceVersion = envelope.version as 1 | 2 | 3;
+  assertBackupPayloadSchema(envelope, problemList, sourceVersion);
 
   return normalizeBackup({
     study: envelope.study,
@@ -479,5 +519,7 @@ export function parseStudyBackup(text: string, problemList: Problem[]): StudyBac
     language: envelope.language,
     reminder: envelope.reminder,
     course: envelope.course,
+    noteImages: sourceVersion === 1 ? emptyNoteImageStore() : envelope.noteImages,
+    mistakeBook: sourceVersion < 3 ? emptyMistakeBookStore() : envelope.mistakeBook,
   }, problemList, envelope.exportedAt);
 }

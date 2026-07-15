@@ -14,6 +14,8 @@ import {
   StudyBackupError,
 } from "../app/study-backup.ts";
 import { MAX_COURSE_TEXT_LENGTH } from "../app/course-notes-model.ts";
+import { emptyNoteImageStore, MAX_NOTE_IMAGE_DIMENSION } from "../app/note-images.ts";
+import { emptyMistakeBookStore } from "../app/mistake-book.ts";
 
 const problems = [
   { id: 1, starterCode: "class Solution:\n    pass" },
@@ -32,6 +34,67 @@ const safeCourse = {
   recognitionLanguage: "zh-CN",
   updatedAt: 123,
 };
+
+function jpegDataUrl(width = 320, height = 180) {
+  const bytes = [
+    0xff, 0xd8,
+    0xff, 0xe0, 0x00, 0x10,
+    0x4a, 0x46, 0x49, 0x46, 0x00,
+    0x01, 0x01, 0x00,
+    0x00, 0x01, 0x00, 0x01,
+    0x00, 0x00,
+    0xff, 0xc0, 0x00, 0x11, 0x08,
+    (height >> 8) & 0xff, height & 0xff,
+    (width >> 8) & 0xff, width & 0xff,
+    0x03,
+    0x01, 0x11, 0x00,
+    0x02, 0x11, 0x01,
+    0x03, 0x11, 0x01,
+    0xff, 0xda, 0x00, 0x0c, 0x03,
+    0x01, 0x00, 0x02, 0x11, 0x03, 0x11,
+    0x00, 0x3f, 0x00,
+    0x00,
+    0xff, 0xd9,
+  ];
+  return `data:image/jpeg;base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+function safeNoteImages() {
+  return {
+    version: 1,
+    byProblem: {
+      1: [{
+        id: "image-note-1",
+        dataUrl: jpegDataUrl(),
+        width: 320,
+        height: 180,
+        caption: "画出哈希表查找过程",
+        createdAt: 1_752_480_000_000,
+      }],
+    },
+  };
+}
+
+function safeMistakeBook() {
+  return {
+    version: 1,
+    entries: [{
+      id: "current-1",
+      origin: "current",
+      title: "1. 两数之和",
+      sourceUrl: "https://leetcode.cn/problems/two-sum/description/",
+      prompt: "返回两个下标。",
+      language: "python",
+      myAnswer: "return []",
+      referenceAnswer: "return [0, 1]",
+      rootCause: "没有保存下标。",
+      takeaway: "配对查找先想哈希表。",
+      status: "reviewing",
+      createdAt: 1_752_480_000_000,
+      updatedAt: 1_752_480_000_001,
+    }],
+  };
+}
 
 function sampleSource() {
   return {
@@ -67,6 +130,8 @@ function sampleSource() {
         { ...safeCourse, sourceUrl: "https://evil.example/video/BV1B7411m7LV" },
       ],
     },
+    noteImages: safeNoteImages(),
+    mistakeBook: safeMistakeBook(),
   };
 }
 
@@ -78,7 +143,7 @@ test("creates a JSON-safe normalized backup and round-trips it", () => {
   const backup = createStudyBackup(sampleSource(), problems, new Date("2026-07-14T08:00:00.000Z"));
 
   assert.equal(backup.format, "tijiebu-backup");
-  assert.equal(backup.version, 1);
+  assert.equal(backup.version, 3);
   assert.equal(backup.exportedAt, "2026-07-14T08:00:00.000Z");
   assert.deepEqual(Object.keys(backup.study.records), ["1"]);
   assert.equal(backup.study.selectedId, 2);
@@ -88,6 +153,8 @@ test("creates a JSON-safe normalized backup and round-trips it", () => {
   assert.equal(backup.language, "en");
   assert.equal(backup.course.courses.length, 1);
   assert.equal(new URL(backup.course.courses[0].embedUrl).origin, "https://player.bilibili.com");
+  assert.deepEqual(backup.noteImages, safeNoteImages());
+  assert.deepEqual(backup.mistakeBook, safeMistakeBook());
 
   const serialized = stringifyStudyBackup(backup);
   assert.doesNotThrow(() => JSON.stringify(backup));
@@ -135,6 +202,22 @@ test("fails explicitly instead of shortening saved study or course text", () => 
   assert.throws(() => createStudyBackup(oversizedCourse, problems, 0), assertBackupError("too-large"));
 });
 
+test("refuses to create an incomplete backup when a local library is missing", () => {
+  const missingNoteImages = sampleSource();
+  delete missingNoteImages.noteImages;
+  assert.throws(
+    () => createStudyBackup(missingNoteImages, problems, 0),
+    assertBackupError("invalid-format"),
+  );
+
+  const missingMistakeBook = sampleSource();
+  delete missingMistakeBook.mistakeBook;
+  assert.throws(
+    () => createStudyBackup(missingMistakeBook, problems, 0),
+    assertBackupError("invalid-format"),
+  );
+});
+
 test("accepts the maximum legal Chinese course text above the old 6 MB ceiling", () => {
   const source = sampleSource();
   source.course = {
@@ -160,7 +243,7 @@ test("rejects bad JSON, wrong envelopes, and future versions", () => {
   assert.throws(() => parseStudyBackup(JSON.stringify({ format: "some-other-app", version: 1 }), problems), assertBackupError("invalid-format"));
 
   const future = createStudyBackup(sampleSource(), problems, 0);
-  future.version = 2;
+  future.version = 4;
   assert.throws(() => parseStudyBackup(JSON.stringify(future), problems), assertBackupError("unsupported-version"));
 
   const incomplete = createStudyBackup(sampleSource(), problems, 0);
@@ -189,6 +272,63 @@ test("rejects bad JSON, wrong envelopes, and future versions", () => {
   const missingNestedCourses = createStudyBackup(sampleSource(), problems, 0);
   delete missingNestedCourses.course.courses;
   assert.throws(() => parseStudyBackup(JSON.stringify(missingNestedCourses), problems), assertBackupError("invalid-format"));
+});
+
+test("imports version 1 and 2 backups without silently accepting newer fields", () => {
+  const legacy = structuredClone(createStudyBackup(sampleSource(), problems, 0));
+  legacy.version = 1;
+  delete legacy.noteImages;
+  delete legacy.mistakeBook;
+
+  const restored = parseStudyBackup(JSON.stringify(legacy), problems);
+  assert.equal(restored.version, 3);
+  assert.deepEqual(restored.noteImages, emptyNoteImageStore());
+  assert.deepEqual(restored.mistakeBook, emptyMistakeBookStore());
+
+  legacy.noteImages = safeNoteImages();
+  assert.throws(() => parseStudyBackup(JSON.stringify(legacy), problems), assertBackupError("invalid-format"));
+
+  const versionTwo = structuredClone(createStudyBackup(sampleSource(), problems, 0));
+  versionTwo.version = 2;
+  delete versionTwo.mistakeBook;
+  const restoredVersionTwo = parseStudyBackup(JSON.stringify(versionTwo), problems);
+  assert.equal(restoredVersionTwo.version, 3);
+  assert.deepEqual(restoredVersionTwo.noteImages, safeNoteImages());
+  assert.deepEqual(restoredVersionTwo.mistakeBook, emptyMistakeBookStore());
+
+  versionTwo.mistakeBook = safeMistakeBook();
+  assert.throws(() => parseStudyBackup(JSON.stringify(versionTwo), problems), assertBackupError("invalid-format"));
+});
+
+test("requires current local libraries and validates JPEG frame dimensions", () => {
+  const missing = createStudyBackup(sampleSource(), problems, 0);
+  delete missing.noteImages;
+  assert.throws(() => parseStudyBackup(JSON.stringify(missing), problems), assertBackupError("invalid-format"));
+
+  const missingMistakeBook = createStudyBackup(sampleSource(), problems, 0);
+  delete missingMistakeBook.mistakeBook;
+  assert.throws(() => parseStudyBackup(JSON.stringify(missingMistakeBook), problems), assertBackupError("invalid-format"));
+
+  const falsifiedDimensions = createStudyBackup(sampleSource(), problems, 0);
+  falsifiedDimensions.noteImages.byProblem[1][0].width = 319;
+  assert.throws(
+    () => parseStudyBackup(JSON.stringify(falsifiedDimensions), problems),
+    assertBackupError("invalid-format"),
+  );
+
+  const hiddenOversizedFrame = createStudyBackup(sampleSource(), problems, 0);
+  hiddenOversizedFrame.noteImages.byProblem[1][0].dataUrl = jpegDataUrl(MAX_NOTE_IMAGE_DIMENSION + 1, 1);
+  hiddenOversizedFrame.noteImages.byProblem[1][0].width = 1;
+  hiddenOversizedFrame.noteImages.byProblem[1][0].height = 1;
+  assert.throws(
+    () => parseStudyBackup(JSON.stringify(hiddenOversizedFrame), problems),
+    assertBackupError("invalid-format"),
+  );
+
+  const unknownProblem = createStudyBackup(sampleSource(), problems, 0);
+  unknownProblem.noteImages.byProblem[999] = unknownProblem.noteImages.byProblem[1];
+  delete unknownProblem.noteImages.byProblem[1];
+  assert.throws(() => parseStudyBackup(JSON.stringify(unknownProblem), problems), assertBackupError("invalid-format"));
 });
 
 test("rejects backup text above the 24 MB limit before parsing", () => {

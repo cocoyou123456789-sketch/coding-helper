@@ -77,6 +77,33 @@
   to { opacity: 1; }
 }
 
+/* The fourth primary destination needs a content-sized action column on wide
+   screens. Keep this scoped here so the shared header does not overlap the
+   progress bar before the two-row layout takes over below. */
+@media (min-width: 1401px) {
+  .responsiveHeader {
+    gap: clamp(16px, 1.5vw, 28px);
+    grid-template-columns: max-content minmax(260px, 1fr) max-content;
+    height: auto;
+    min-height: 76px;
+    padding: 8px 0;
+  }
+
+  .responsiveHeader > :global(.brand-block),
+  .responsiveHeader > :global(.header-progress),
+  .responsiveHeader > :global(.header-actions) {
+    min-width: 0;
+  }
+
+  .responsiveHeader > :global(.header-actions) {
+    flex-wrap: wrap;
+  }
+
+  .responsiveHeader > :global(.header-actions) > * {
+    flex-shrink: 0;
+  }
+}
+
 @media (min-width: 761px) and (max-width: 1400px) {
   .responsiveHeader {
     gap: 8px 18px;

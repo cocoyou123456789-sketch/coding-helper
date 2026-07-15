@@ -18,6 +18,12 @@ test("backup restore uses a two-phase journal with its payload in dedicated stor
   assert.doesNotMatch(nativeStorage, /Object\.hasOwn\(/);
 });
 
+test("large local libraries use the same verified crash-safe transaction", () => {
+  assert.match(nativeStorage, /export async function writeLargeStoredValuesAtomically/);
+  assert.match(nativeStorage, /runStorageTransactionDirect\(\{ values: \{\}, largeValues: \{ \.\.\.values \} \}\)/);
+  assert.match(nativeStorage, /keys\.includes\(STORAGE_TRANSACTION_PAYLOAD_KEY\)/);
+});
+
 test("primary failures cannot be hidden by a stale large-value fallback", () => {
   assert.match(nativeStorage, /Only a confirmed "missing" primary may consult the legacy fallback/);
   assert.match(nativeStorage, /Large value write could not be verified/);

@@ -29,8 +29,10 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
   assert.equal(nativeHtml, html);
   assert.doesNotMatch(nativeHtml, /leetcode-code-editor-[^"']+\.js/);
   assert.doesNotMatch(nativeHtml, /course-notes-[^"']+\.js/);
+  assert.doesNotMatch(nativeHtml, /note-image-panel-[^"']+\.js/);
+  assert.doesNotMatch(nativeHtml, /mistake-book-panel-[^"']+\.js/);
 
-  for (const moduleId of ["app/leetcode-code-editor.tsx", "app/course-notes.tsx"]) {
+  for (const moduleId of ["app/leetcode-code-editor.tsx", "app/course-notes.tsx", "app/note-image-panel.tsx", "app/mistake-book-panel.tsx"]) {
     const entry = manifest[moduleId];
     assert.equal(entry?.isDynamicEntry, true);
     await stat(file(`ios/App/App/public/${entry.file}`));
@@ -61,6 +63,10 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
   assert.match(infoPlist, /NSMicrophoneUsageDescription/);
   assert.match(infoPlist, /NSSpeechRecognitionUsageDescription/);
   assert.match(infoPlist, /不会保存录音/);
+  assert.match(infoPlist, /NSPhotoLibraryUsageDescription/);
+  assert.match(infoPlist, /NSCameraUsageDescription/);
+  assert.equal((infoPlist.match(/主动添加题目图片笔记/g) ?? []).length, 2);
+  assert.equal((infoPlist.match(/主动导出完整备份/g) ?? []).length, 2);
   assert.doesNotMatch(`${nativeStorageSource}\n${courseModelSource}\n${editorSource}`, /Object\.hasOwn\(|\.at\(/);
 
   await assert.rejects(stat(file("ios/App/App/public/sw.js")), { code: "ENOENT" });

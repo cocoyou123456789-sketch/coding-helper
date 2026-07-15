@@ -33,7 +33,7 @@ export type ReminderSaveResult = "scheduled" | "disabled" | "denied" | "unsuppor
 export type ClearStoredStudyDataResult = { reminderCancelled: boolean };
 
 export type StoredStudySnapshot = {
-  values: Record<string, string>;
+  values: Record<string, string | null>;
   largeValues: Record<string, string>;
   reminder: DailyReminder;
 };
@@ -591,6 +591,20 @@ export async function setLargeStoredValue(key: string, value: string): Promise<v
   await withStorageOperation(async () => {
     await recoverInterruptedStorageTransactionDirect();
     await setLargeStoredValueDirect(key, value);
+  });
+}
+
+/** Atomically replace one or more large JSON documents with crash-safe rollback. */
+export async function writeLargeStoredValuesAtomically(values: Record<string, string>): Promise<void> {
+  const keys = Object.keys(values);
+  if (!keys.length
+    || keys.includes(STORAGE_TRANSACTION_PAYLOAD_KEY)
+    || Object.values(values).some((value) => typeof value !== "string")) {
+    throw new Error("A large-value transaction requires at least one text value.");
+  }
+  await withStorageOperation(async () => {
+    await recoverInterruptedStorageTransactionDirect();
+    await runStorageTransactionDirect({ values: {}, largeValues: { ...values } });
   });
 }
 

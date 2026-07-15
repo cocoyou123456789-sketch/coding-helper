@@ -12,7 +12,7 @@
     "build:ios:web": "CAPACITOR_APP=true npm run build && node scripts/copy-pyodide.mjs",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs && npm run test:backup && npm run test:bundle && npm run test:sw && npm run test:dialogs && npm run test:editor && npm run test:ide && npm run test:navigation && npm run test:runner && npm run test:storage && npm run test:tabs && npm run test:course",
-    "test:backup": "node --experimental-strip-types --test tests/study-backup.test.mjs tests/study-data-session.test.mjs tests/backup-integration.test.mjs tests/native-storage-safety.test.mjs tests/native-storage-behavior.test.mjs",
+    "test:backup": "node --experimental-strip-types --test tests/study-backup.test.mjs tests/note-images.test.mjs tests/mistake-book.test.mjs tests/study-data-session.test.mjs tests/backup-integration.test.mjs tests/native-storage-safety.test.mjs tests/native-storage-behavior.test.mjs",
     "test:bundle": "node --test tests/client-bundle.test.mjs",
     "test:course": "node --experimental-strip-types --test tests/course-notes.test.mjs",
     "test:dialogs": "node --test tests/dialog-focus.test.mjs",

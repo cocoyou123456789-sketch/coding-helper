@@ -1,0 +1,362 @@
+.panel {
+  background: #fffafb;
+  min-height: 100%;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.intro {
+  align-items: flex-start;
+  background: linear-gradient(135deg, #fff1f5, #fff9fb);
+  border: 1px solid #efcad5;
+  border-radius: 14px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 13px;
+}
+
+.intro h3,
+.intro p,
+.intro small,
+.counter,
+.emptyState p,
+.previewDialog p {
+  margin: 0;
+}
+
+.intro h3 {
+  color: #38282e;
+  font-size: max(16px, 0.78rem);
+}
+
+.problemTitle {
+  color: #9a3f5d;
+  display: block;
+  font-size: max(13px, 0.62rem);
+  margin-top: 3px;
+}
+
+.intro p {
+  color: #765e67;
+  font-size: max(13px, 0.62rem);
+  line-height: 1.55;
+  margin-top: 5px;
+}
+
+.intro small {
+  color: #8b737c;
+  display: block;
+  font-size: max(12px, 0.56rem);
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.addButton {
+  align-items: center;
+  background: #c54f74;
+  border: 1px solid #ad3c60;
+  border-radius: 10px;
+  box-shadow: 0 2px 0 #9e3455;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: max(14px, 0.65rem);
+  font-weight: 800;
+  gap: 4px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 13px;
+}
+
+.addButton:disabled,
+.deleteButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.addButton:focus-visible,
+.thumbnail:focus-visible,
+.deleteButton:focus-visible,
+.captionField input:focus-visible,
+.previewHeader button:focus-visible {
+  outline: 3px solid rgba(197, 79, 116, 0.32);
+  outline-offset: 2px;
+}
+
+.fileInput {
+  height: 1px;
+  left: -10000px;
+  overflow: hidden;
+  position: absolute;
+  top: auto;
+  width: 1px;
+}
+
+.counter {
+  color: #7e6870;
+  font-size: max(12px, 0.56rem);
+  padding: 9px 2px 7px;
+}
+
+.statusMessage,
+.errorMessage,
+.errorBox {
+  border-radius: 10px;
+  font-size: max(13px, 0.6rem);
+  line-height: 1.45;
+  margin: 4px 0 10px;
+  padding: 9px 10px;
+}
+
+.statusMessage {
+  background: #eaf8f3;
+  border: 1px solid #b9e2d3;
+  color: #25624e;
+}
+
+.errorMessage,
+.errorBox {
+  background: #fff0f2;
+  border: 1px solid #efbec8;
+  color: #8c2944;
+}
+
+.emptyState {
+  align-items: center;
+  border: 1px dashed #e4c4cd;
+  border-radius: 14px;
+  color: #806c73;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  min-height: 180px;
+  padding: 22px 14px;
+  text-align: center;
+}
+
+.emptyState > span {
+  align-items: center;
+  background: #ffe7ee;
+  border-radius: 50%;
+  color: #b94368;
+  display: flex;
+  font-size: 24px;
+  height: 48px;
+  justify-content: center;
+  margin-bottom: 10px;
+  width: 48px;
+}
+
+.emptyState strong {
+  color: #4f3a42;
+  font-size: max(15px, 0.7rem);
+}
+
+.emptyState p {
+  font-size: max(13px, 0.6rem);
+  line-height: 1.5;
+  margin-top: 5px;
+  max-width: 30em;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 18px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #ead2d9;
+  border-radius: 13px;
+  box-shadow: 0 7px 20px rgba(89, 51, 64, 0.06);
+  min-width: 0;
+  overflow: hidden;
+  padding-bottom: 9px;
+}
+
+.thumbnail {
+  aspect-ratio: 4 / 3;
+  background: #f7edf0;
+  border: 0;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+
+.thumbnail img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.captionField {
+  display: block;
+  padding: 9px 9px 0;
+}
+
+.captionField span,
+.captionField small {
+  display: block;
+}
+
+.draftConflict {
+  background: #fff5d9;
+  border: 1px solid #e4c66e;
+  border-radius: 9px;
+  color: #6d5010;
+  margin: 8px 9px 0;
+  padding: 9px;
+}
+
+.draftConflict p {
+  font-size: max(12px, 0.56rem);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.draftConflict > div {
+  display: flex;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.draftConflict button {
+  background: #fff;
+  border: 1px solid #caa849;
+  border-radius: 7px;
+  color: #684b09;
+  flex: 1;
+  font: inherit;
+  font-size: max(12px, 0.56rem);
+  font-weight: 750;
+  min-height: 44px;
+  padding: 6px;
+}
+
+.captionField span {
+  color: #4c3940;
+  font-size: max(12px, 0.56rem);
+  font-weight: 750;
+}
+
+.captionField input {
+  background: #fff8fa;
+  border: 1px solid #ead2d9;
+  border-radius: 8px;
+  color: #38282e;
+  font-size: max(16px, 0.66rem);
+  margin-top: 5px;
+  min-height: 44px;
+  padding: 7px 8px;
+  width: 100%;
+}
+
+.captionField small {
+  color: #8b737c;
+  font-size: max(11px, 0.52rem);
+  margin-top: 4px;
+}
+
+.deleteButton {
+  background: transparent;
+  border: 0;
+  color: #a23a5b;
+  font-size: max(13px, 0.58rem);
+  font-weight: 750;
+  margin: 5px 9px 0;
+  min-height: 44px;
+  padding: 0 5px;
+}
+
+.previewBackdrop {
+  align-items: center;
+  background: rgba(35, 23, 29, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  position: fixed;
+  z-index: 1000;
+}
+
+.previewDialog {
+  background: #fffafb;
+  border-radius: 16px;
+  box-shadow: 0 26px 70px rgba(20, 10, 15, 0.34);
+  max-height: min(92vh, 92dvh);
+  max-width: min(960px, 96vw);
+  overflow: auto;
+  padding: 12px;
+  width: fit-content;
+}
+
+.previewHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.previewHeader h3 {
+  color: #38282e;
+  font-size: max(16px, 0.75rem);
+  margin: 0;
+}
+
+.previewHeader button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e4c4cd;
+  border-radius: 50%;
+  color: #6f535e;
+  display: flex;
+  font-size: 22px;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.previewDialog > img {
+  display: block;
+  height: auto;
+  max-height: calc(92dvh - 110px);
+  max-width: min(920px, calc(96vw - 24px));
+  object-fit: contain;
+  width: auto;
+}
+
+.previewDialog p {
+  color: #604b53;
+  font-size: max(14px, 0.65rem);
+  line-height: 1.5;
+  padding: 10px 2px 2px;
+}
+
+@media (max-width: 760px) {
+  .panel {
+    padding: 12px;
+  }
+
+  .intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .addButton {
+    width: 100%;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deleteButton {
+    min-height: 44px;
+  }
+}

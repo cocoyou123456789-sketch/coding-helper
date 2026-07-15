@@ -5,11 +5,12 @@ import test from "node:test";
 const file = (path) => new URL(`../${path}`, import.meta.url);
 
 test("full backup is available on web and iOS with verified storage and paused autosave", async () => {
-  const [page, nativeStorage, courseNotes, courseStorage, studySession, backupStyles, privacy, support] = await Promise.all([
+  const [page, nativeStorage, courseNotes, courseStorage, mistakeStorage, studySession, backupStyles, privacy, support] = await Promise.all([
     readFile(file("app/page.tsx"), "utf8"),
     readFile(file("app/native-app.ts"), "utf8"),
     readFile(file("app/course-notes.tsx"), "utf8"),
     readFile(file("app/course-storage.ts"), "utf8"),
+    readFile(file("app/mistake-book-storage.ts"), "utf8"),
     readFile(file("app/study-data-session.ts"), "utf8"),
     readFile(file("app/backup-settings.module.css"), "utf8"),
     readFile(file("app/privacy/page.tsx"), "utf8"),
@@ -22,7 +23,20 @@ test("full backup is available on web and iOS with verified storage and paused a
   assert.match(page, /restoreStudySnapshot/);
   assert.match(page, /dataOperationRef\.current = true/);
   assert.match(page, /await storageWritesRef\.current/);
+  assert.match(page, /libraryMutationsPausedRef\.current = true/);
+  assert.match(page, /await localLibraryWritesRef\.current/);
+  assert.match(page, /function queueLocalLibraryAction<T>/);
+  assert.match(page, /localLibraryWritesRef\.current = result\.then/);
+  assert.match(page, /localLibraryEditingBlocked \|\| libraryMutationsPausedRef\.current \|\| noteImagesLoadFailed/);
+  assert.match(page, /localLibraryEditingBlocked \|\| libraryMutationsPausedRef\.current \|\| mistakeBookLoadFailed/);
   assert.match(page, /await drainCourseStoreWrites\(\)/);
+  assert.match(page, /await drainNoteImageStoreWrites\(\)/);
+  assert.match(page, /await drainMistakeBookStoreWrites\(\)/);
+  assert.match(page, /MISTAKE_BOOK_STORAGE_KEY/);
+  assert.match(page, /NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY/);
+  assert.match(page, /\[NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY\]: null/);
+  assert.match(page, /previousCaptionDraftsValue/);
+  assert.match(page, /backup\.mistakeBook/);
   assert.match(page, /advanceStudyDataRevision\(\)/);
   assert.match(page, /hasOtherActiveStudyTab\(\)/);
   assert.match(page, /queuedStudyValueRef/);
@@ -68,6 +82,9 @@ test("full backup is available on web and iOS with verified storage and paused a
   assert.equal((courseStorage.match(/withStudyDataWriteLock\(async \(\) => \{\s*advanceStudyDataRevision\(\);\s*await setLargeStoredValue/g) ?? []).length, 2);
   assert.match(courseStorage, /persistedCourseStore/);
   assert.match(courseNotes, /setLoadFailed\(true\)/);
+  assert.match(mistakeStorage, /writeLargeStoredValuesAtomically/);
+  assert.match(mistakeStorage, /withStudyDataWriteLock/);
+  assert.match(mistakeStorage, /advanceStudyDataRevision/);
   assert.match(studySession, /STUDY_DATA_STALE_EVENT/);
   assert.match(studySession, /REVISION_KEY/);
   assert.match(studySession, /pendingProbes/);
@@ -78,5 +95,11 @@ test("full backup is available on web and iOS with verified storage and paused a
   assert.ok(backupStyles.indexOf("max-height: calc(100vh") < backupStyles.indexOf("max-height: calc(100dvh"));
 
   assert.match(privacy, /完整备份是可阅读的 JSON 明文文件/);
+  assert.match(privacy, /完整备份[^。]*会包含[^。]*图片笔记/);
+  assert.match(privacy, /完整备份[^。]*会包含[^。]*错题本/);
+  assert.match(privacy, /删除本机学习数据[^。]*图片笔记/);
   assert.match(support, /设置 → 完整备份/);
+  assert.match(support, /完整备份会包含[^。]*图片笔记/);
+  assert.match(support, /完整备份会包含[^。]*错题本/);
+  assert.match(support, /设置 → 删除本机学习数据[^。]*全部图片笔记/);
 });

@@ -124,7 +124,7 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.equal(manifest.background_color, "#fff7f9");
   assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
-  assert.match(serviceWorkerSource, /2026-07-14-signature-v1/);
+  assert.match(serviceWorkerSource, /2026-07-15-mistake-book-v1/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));
@@ -146,4 +146,26 @@ test("course note inputs stay named, tappable, and above the iOS zoom threshold"
   assert.match(source, /aria-labelledby="course-personal-notes-heading"/);
   assert.match(baseStyles, /\.notebookCard textarea[\s\S]*font-size: max\(16px, 0\.86rem\)/);
   assert.match(baseStyles, /\.notebookHead button[\s\S]*min-height: 44px/);
+});
+
+test("privacy and support explain local image notes, mistake reviews, backups, and deletion", async () => {
+  const [privacy, support, infoPlist] = await Promise.all([
+    readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/support/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../ios/App/App/Info.plist", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(privacy, /相册、相机和图片笔记/);
+  assert.match(privacy, /图片会作为该题的学习笔记保存在当前设备/);
+  assert.match(privacy, /完整备份[^。]*会包含[^。]*图片笔记/);
+  assert.match(privacy, /删除本机学习数据[^。]*图片笔记/);
+  assert.match(privacy, /错题本和来源链接/);
+  assert.match(privacy, /不会把代码发送给 AI 服务/);
+  assert.match(privacy, /完整备份[^。]*错题本/);
+  assert.match(support, /完整备份会包含[^。]*图片笔记/);
+  assert.match(support, /设置 → 删除本机学习数据[^。]*全部图片笔记/);
+  assert.match(support, /如何导入错题并对比答案/);
+  assert.match(support, /它不是 AI/);
+  assert.match(infoPlist, /NSPhotoLibraryUsageDescription/);
+  assert.match(infoPlist, /NSCameraUsageDescription/);
 });

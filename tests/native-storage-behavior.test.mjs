@@ -173,16 +173,64 @@ async function importFreshStorageModule() {
 
 test("writeStoredStudySnapshot round-trips small and IndexedDB-backed large values", async () => {
   const { storage } = await createHarness();
+  await storage.setStoredValue("caption-drafts", "old unsaved caption");
 
   await storage.writeStoredStudySnapshot({
-    values: { "study-small": "new small value", language: "en" },
+    values: { "study-small": "new small value", language: "en", "caption-drafts": null },
     largeValues: { "study-large": "new large value" },
     reminder: { enabled: false, time: "08:45" },
   });
 
   assert.equal(await storage.getStoredValue("study-small"), "new small value");
+  assert.equal(await storage.getStoredValue("caption-drafts"), null);
   assert.equal(await storage.getLargeStoredValue("study-large"), "new large value");
   assert.deepEqual(await storage.loadDailyReminder(), { enabled: false, time: "08:45" });
+});
+
+test("writeLargeStoredValuesAtomically commits every requested document together", async () => {
+  const { storage } = await createHarness();
+
+  await storage.writeLargeStoredValuesAtomically({
+    "image-library": "first image snapshot",
+    "course-library": "first course snapshot",
+  });
+
+  assert.equal(await storage.getLargeStoredValue("image-library"), "first image snapshot");
+  assert.equal(await storage.getLargeStoredValue("course-library"), "first course snapshot");
+  assert.equal(window.localStorage.getItem(JOURNAL_KEY), null);
+});
+
+test("writeLargeStoredValuesAtomically rolls every document back when one target write fails", async () => {
+  const { indexedDB, storage } = await createHarness();
+  await storage.setLargeStoredValue("image-library", "old images");
+  await storage.setLargeStoredValue("course-library", "old courses");
+  indexedDB.failNextPuts("course-library");
+
+  await assert.rejects(
+    storage.writeLargeStoredValuesAtomically({
+      "image-library": "new images",
+      "new-only-library": "must be removed by rollback",
+      "course-library": "new courses",
+    }),
+    /Injected IndexedDB put failure/,
+  );
+
+  assert.equal(await storage.getLargeStoredValue("image-library"), "old images");
+  assert.equal(await storage.getLargeStoredValue("new-only-library"), null);
+  assert.equal(await storage.getLargeStoredValue("course-library"), "old courses");
+  assert.equal(window.localStorage.getItem(JOURNAL_KEY), null);
+  assert.equal(indexedDB.getValue(JOURNAL_PAYLOAD_KEY), null);
+});
+
+test("writeLargeStoredValuesAtomically rejects empty and reserved transactions before writing", async () => {
+  const { storage } = await createHarness();
+
+  await assert.rejects(storage.writeLargeStoredValuesAtomically({}), /requires at least one text value/);
+  await assert.rejects(
+    storage.writeLargeStoredValuesAtomically({ [JOURNAL_PAYLOAD_KEY]: "overwrite journal" }),
+    /requires at least one text value/,
+  );
+  assert.equal(await storage.getLargeStoredValue(JOURNAL_PAYLOAD_KEY), null);
 });
 
 test("a failed target write automatically restores the previous small and large values", async () => {

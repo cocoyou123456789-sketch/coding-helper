@@ -12,6 +12,43 @@ import headerStyles from "./header.module.css";
 import type { LeetCodeCodeEditorHandle } from "./leetcode-code-editor";
 import LearningHub, { type LearningProfile } from "./learning-hub";
 import {
+  createCurrentProblemMistake,
+  emptyMistakeBookStore,
+  MISTAKE_BOOK_STORAGE_KEY,
+  parseMistakeBookStore,
+  removeMistakeEntry,
+  upsertMistakeEntry,
+  type CurrentProblemMistakeSeed,
+  type MistakeBookStore,
+  type MistakeEntry,
+} from "./mistake-book";
+import {
+  drainMistakeBookStoreWrites,
+  latestMistakeBookStoreSnapshot,
+  markMistakeBookStoreLoaded,
+  queueMistakeBookStoreMutation,
+} from "./mistake-book-storage";
+import {
+  addNoteImage,
+  emptyNoteImageStore,
+  NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY,
+  NOTE_IMAGES_STORAGE_KEY,
+  noteImageCount,
+  noteImagesForProblem,
+  parseNoteImageStore,
+  removeNoteImage,
+  updateNoteImageCaption,
+  type NoteImageAttachment,
+  type NoteImageStore,
+} from "./note-images";
+import {
+  drainNoteImageStoreWrites,
+  latestNoteImageStoreSnapshot,
+  markNoteImageStoreLoaded,
+  queueNoteImageStoreMutation,
+} from "./note-image-storage";
+import type { NoteImageActionFailure, NoteImageActionResult } from "./note-image-panel";
+import {
   navigationHref,
   parseNavigationState,
   type AppMode,
@@ -97,8 +134,12 @@ import { useDialogFocus } from "./use-dialog-focus";
 
 const loadCourseNotes = () => import("./course-notes");
 const loadCodeEditor = () => import("./leetcode-code-editor");
+const loadMistakeBookPanel = () => import("./mistake-book-panel");
+const loadNoteImagePanel = () => import("./note-image-panel");
 const CourseNotes = lazy(loadCourseNotes);
 const LeetCodeCodeEditor = lazy(loadCodeEditor);
+const MistakeBookPanel = lazy(loadMistakeBookPanel);
+const NoteImagePanel = lazy(loadNoteImagePanel);
 
 export const dynamic = "force-static";
 
@@ -120,6 +161,16 @@ type RunState =
   | { phase: "error"; kind: "code" | "timeout" | "runtime"; message: string; results: WorkerTestResult[]; stdout?: string; errorLine?: number; signatureIssue?: PythonSignatureIssue };
 
 type BackupOperation = "idle" | "exporting" | "checking" | "restoring";
+
+class NoteImageMutationError extends Error {
+  readonly reason: NoteImageActionFailure;
+
+  constructor(reason: NoteImageActionFailure) {
+    super(reason);
+    this.name = "NoteImageMutationError";
+    this.reason = reason;
+  }
+}
 
 const STORAGE_KEY = "leetcode-hot100-study-notebook-v1";
 const FONT_SIZE_KEY = "leetcode-hot100-font-size-v1";
@@ -191,6 +242,9 @@ const pageCopy = {
     freePractice: "完整题练习",
     learningPath: "学习首页",
     courseNotes: "课程笔记",
+    mistakeBook: "错题本",
+    mistakeBookLoading: "正在打开错题本…",
+    mistakeBookLoadFailed: "错题本暂时无法安全读取。为避免覆盖原记录，本页只读；请先导出其他重要笔记并重新加载。",
     appNavigation: "主要页面",
     mobileProblemList: "选题",
     mobileCode: "原题 + 代码",
@@ -297,6 +351,8 @@ const pageCopy = {
     saved: "已自动保存",
     lineNotes: "写的每一行都是什么意思",
     reflection: "思路与复盘",
+    imageNotes: (count: number) => count > 0 ? `图片 ${count}` : "图片",
+    imageNotesLoading: "正在打开图片笔记…",
     linePrompt: "写的每一行都是什么意思？",
     lineQuestions: "用自己的话说明：这一行做了什么，为什么这样写。",
     fillNotes: "插入基础解释（请改成自己的话）",
@@ -328,7 +384,7 @@ const pageCopy = {
     runAnyway: "仍然运行",
     wrongAnswerTitle: "代码能运行，先只修第一个不同",
     wrongAnswerBody: "用这个输入手算一遍，再追踪差异位置的值在哪里写入，不用同时检查整份代码。",
-    saveFailedReview: "保存到错题笔记",
+    saveFailedReview: "加入错题本并对比",
     backToErrorLine: (line: number) => `回到第 ${line} 行`,
     signatureStatus: "题目要求的代码入口被改了",
     signatureTitle: "先恢复原题要求的代码入口",
@@ -375,11 +431,12 @@ const pageCopy = {
     reminderUnsupported: "当前环境不支持手机提醒。",
     reminderError: "提醒暂时没有保存成功，请稍后重试。",
     fullBackup: "完整备份",
-    backupBody: "导出代码、逐行解释、复盘、课程听写、学习进度和偏好设置。",
+    backupBody: "导出代码、逐行解释、复盘、错题本、图片笔记、课程听写、学习进度和偏好设置。",
     exportBackup: "导出备份",
     restoreBackup: "从文件恢复",
-    backupPrivacy: "备份文件是可阅读的明文，包含你的代码、课程链接、听写文字和笔记。只保存到你信任的位置；题解簿不会上传它。",
+    backupPrivacy: "备份文件是可阅读的明文，包含你的代码、错题本、图片笔记、课程链接、听写文字和笔记。只保存到你信任的位置；题解簿不会上传它。",
     backupPreparing: "正在整理备份…",
+    localLibraryBackupBlocked: "图片笔记或错题本暂时无法安全读取，因此没有导出不完整备份。请先分享重要文字笔记并重新加载。",
     backupDownloaded: "备份已下载。",
     backupShared: "已打开分享菜单，请选择“存储到文件”或其他可信位置。",
     backupFailed: "备份没有导出成功，请检查本机存储空间后重试。",
@@ -393,17 +450,17 @@ const pageCopy = {
     backupNewer: "此备份来自更新版本，请先更新题解簿。",
     reviewBackup: "检查备份",
     backupCreated: "备份时间",
-    backupContains: (problems: number, courses: number, xp: number) => `包含：${problems} 道题的学习记录 · ${courses} 节课程 · ${xp} XP`,
-    currentContains: (problems: number, courses: number) => `本机当前：${problems} 道题的学习记录 · ${courses} 节课程`,
+    backupContains: (problems: number, courses: number, images: number, mistakes: number, xp: number) => `包含：${problems} 道题的学习记录 · ${courses} 节课程 · ${images} 张图片 · ${mistakes} 道错题 · ${xp} XP`,
+    currentContains: (problems: number, courses: number, images: number, mistakes: number) => `本机当前：${problems} 道题的学习记录 · ${courses} 节课程 · ${images} 张图片 · ${mistakes} 道错题`,
     restoreWarning: "恢复会替换这台设备现有的全部学习数据，不会合并。导入的学习提醒默认关闭。",
     exportCurrentFirst: "先导出本机数据",
     cancelRestore: "取消",
     confirmRestore: "替换并恢复",
     restoringBackup: "正在恢复，请不要关闭页面…",
-    restoreSuccess: (problems: number, courses: number) => `恢复完成：${problems} 道题、${courses} 节课程。正在重新打开…`,
+    restoreSuccess: (problems: number, courses: number, images: number, mistakes: number) => `恢复完成：${problems} 道题、${courses} 节课程、${images} 张图片、${mistakes} 道错题。正在重新打开…`,
     restoreRolledBack: "恢复失败，本机原数据已还原。请检查存储空间后再试。",
     restoreRollbackFailed: "恢复未完成，部分数据可能已改变。请保留备份文件并重新打开后再试。",
-    shareNotes: "分享笔记",
+    shareNotes: "分享文字笔记",
     shareSuccess: "已打开分享菜单。",
     shareCopied: "笔记已复制。",
     shareUnavailable: "当前设备暂时无法分享。",
@@ -412,7 +469,7 @@ const pageCopy = {
     support: "帮助与联系",
     licenses: "开源许可",
     deleteData: "删除本机学习数据",
-    deleteConfirm: "确定删除这台设备上的全部代码、笔记、进度和提醒吗？这个操作无法撤销。",
+    deleteConfirm: "确定删除这台设备上的全部代码、错题本、文字与图片笔记、进度和提醒吗？这个操作无法撤销。",
     deletingData: "正在删除本机学习数据…",
     deleteDone: "本机学习数据已删除。",
     deleteReminderWarning: "学习数据已删除，但系统提醒可能仍存在。请在 iPhone 设置 → 通知 → 题解簿中关闭它。",
@@ -439,6 +496,9 @@ const pageCopy = {
     freePractice: "Full Practice",
     learningPath: "Study Home",
     courseNotes: "Course Notes",
+    mistakeBook: "Mistake Book",
+    mistakeBookLoading: "Opening the mistake book…",
+    mistakeBookLoadFailed: "The mistake book could not be read safely. It is read-only to avoid overwriting existing entries; export other important notes and reload first.",
     appNavigation: "Main pages",
     mobileProblemList: "Choose",
     mobileCode: "Prompt + Code",
@@ -545,6 +605,8 @@ const pageCopy = {
     saved: "Saved",
     lineNotes: "What each line means",
     reflection: "Plan & review",
+    imageNotes: (count: number) => count > 0 ? `Images ${count}` : "Images",
+    imageNotesLoading: "Opening image notes…",
     linePrompt: "What does each line of your code mean?",
     lineQuestions: "Explain in your own words what this line does and why it is here.",
     fillNotes: "Insert basic explanations (rewrite them in your own words)",
@@ -576,7 +638,7 @@ const pageCopy = {
     runAnyway: "Run anyway",
     wrongAnswerTitle: "The code runs — fix only the first difference",
     wrongAnswerBody: "Work through this input once, then trace where the differing value is written. You do not need to inspect the whole solution at once.",
-    saveFailedReview: "Save to mistake notes",
+    saveFailedReview: "Add to mistake book",
     backToErrorLine: (line: number) => `Go to line ${line}`,
     signatureStatus: "The required problem entry was changed",
     signatureTitle: "Restore the entry required by the problem",
@@ -623,11 +685,12 @@ const pageCopy = {
     reminderUnsupported: "Study reminders are not supported in this environment.",
     reminderError: "The reminder could not be saved. Please try again.",
     fullBackup: "Full backup",
-    backupBody: "Export your code, line explanations, reviews, course transcripts, progress, and preferences.",
+    backupBody: "Export your code, line explanations, reviews, mistake book, image notes, course transcripts, progress, and preferences.",
     exportBackup: "Export backup",
     restoreBackup: "Restore from file",
-    backupPrivacy: "Backup files are readable plain text and include your code, course links, transcripts, and notes. Save them only in a trusted location; AlgoQuest never uploads them.",
+    backupPrivacy: "Backup files are readable plain text and include your code, mistake book, image notes, course links, transcripts, and notes. Save them only in a trusted location; AlgoQuest never uploads them.",
     backupPreparing: "Preparing backup…",
+    localLibraryBackupBlocked: "Image notes or the mistake book could not be read safely, so an incomplete backup was not exported. Share important text notes and reload first.",
     backupDownloaded: "Backup downloaded.",
     backupShared: "The share sheet is open. Choose Save to Files or another trusted location.",
     backupFailed: "The backup could not be exported. Check device storage and try again.",
@@ -641,17 +704,17 @@ const pageCopy = {
     backupNewer: "This backup was made by a newer version. Update AlgoQuest first.",
     reviewBackup: "Review backup",
     backupCreated: "Backup created",
-    backupContains: (problems: number, courses: number, xp: number) => `Contains: ${problems} problem records · ${courses} courses · ${xp} XP`,
-    currentContains: (problems: number, courses: number) => `On this device: ${problems} problem records · ${courses} courses`,
+    backupContains: (problems: number, courses: number, images: number, mistakes: number, xp: number) => `Contains: ${problems} problem records · ${courses} courses · ${images} images · ${mistakes} mistakes · ${xp} XP`,
+    currentContains: (problems: number, courses: number, images: number, mistakes: number) => `On this device: ${problems} problem records · ${courses} courses · ${images} images · ${mistakes} mistakes`,
     restoreWarning: "Restoring replaces all study data on this device. It will not merge the two sets. Imported reminders stay off.",
     exportCurrentFirst: "Export current data first",
     cancelRestore: "Cancel",
     confirmRestore: "Replace & restore",
     restoringBackup: "Restoring — keep this page open…",
-    restoreSuccess: (problems: number, courses: number) => `Restored ${problems} problem records and ${courses} courses. Reopening…`,
+    restoreSuccess: (problems: number, courses: number, images: number, mistakes: number) => `Restored ${problems} problem records, ${courses} courses, ${images} images, and ${mistakes} mistakes. Reopening…`,
     restoreRolledBack: "Restore failed, and the original on-device data was restored. Check storage space and try again.",
     restoreRollbackFailed: "Restore did not finish and some data may have changed. Keep the backup file and reopen the app before trying again.",
-    shareNotes: "Share notes",
+    shareNotes: "Share text notes",
     shareSuccess: "The share sheet is open.",
     shareCopied: "Notes copied.",
     shareUnavailable: "Sharing is not available on this device.",
@@ -660,7 +723,7 @@ const pageCopy = {
     support: "Help & support",
     licenses: "Open-source licenses",
     deleteData: "Delete on-device study data",
-    deleteConfirm: "Delete all code, notes, progress, and reminders stored on this device? This cannot be undone.",
+    deleteConfirm: "Delete all code, mistake-book entries, text and image notes, progress, and reminders stored on this device? This cannot be undone.",
     deletingData: "Deleting on-device study data…",
     deleteDone: "On-device study data deleted.",
     deleteReminderWarning: "Study data was deleted, but a system reminder may remain. Turn it off in iPhone Settings → Notifications → AlgoQuest.",
@@ -681,7 +744,7 @@ const difficultyOrder: Record<Problem["difficulty"], number> = {
 };
 
 const MOBILE_WORKSPACE_TABS = ["library", "code", "notes"] as const;
-const NOTE_TABS = ["line", "review"] as const;
+const NOTE_TABS = ["line", "review", "images"] as const;
 const PRACTICE_STATUS_FILTERS = ["all", "learning", "review", "todo", "solved"] as const satisfies readonly PracticeStatusFilter[];
 const COMPACT_WORKSPACE_QUERY = "(max-width: 760px)";
 
@@ -801,7 +864,17 @@ export default function Home() {
   const [topic, setTopic] = useState("all");
   const [difficultyFilter, setDifficultyFilter] = useState<"all" | Problem["difficulty"]>("简单");
   const [statusFilter, setStatusFilter] = useState<PracticeStatusFilter>("all");
-  const [noteTab, setNoteTab] = useState<"line" | "review">("line");
+  const [noteTab, setNoteTab] = useState<(typeof NOTE_TABS)[number]>("line");
+  const [noteImageStore, setNoteImageStore] = useState<NoteImageStore>(() => emptyNoteImageStore());
+  const [noteImagesLoadFailed, setNoteImagesLoadFailed] = useState(false);
+  const [mistakeBookStore, setMistakeBookStore] = useState<MistakeBookStore>(() => emptyMistakeBookStore());
+  const [mistakeBookLoadFailed, setMistakeBookLoadFailed] = useState(false);
+  const [showMistakeBook, setShowMistakeBook] = useState(false);
+  const [mistakeBookMounted, setMistakeBookMounted] = useState(false);
+  const [mistakeBookSelectionRequest, setMistakeBookSelectionRequest] = useState<{
+    entryId: string;
+    sequence: number;
+  } | null>(null);
   const [noteLineMode, setNoteLineMode] = useState<"current" | "all">("current");
   const [activeCodeLine, setActiveCodeLine] = useState(1);
   const [runState, setRunState] = useState<RunState>({ phase: "idle", message: "还没有运行测试", results: [] });
@@ -831,6 +904,8 @@ export default function Home() {
   const [backupMessageIsError, setBackupMessageIsError] = useState(false);
   const [pendingBackup, setPendingBackup] = useState<StudyBackup | null>(null);
   const [currentCourseCount, setCurrentCourseCount] = useState(0);
+  const [currentImageCount, setCurrentImageCount] = useState(0);
+  const [currentMistakeCount, setCurrentMistakeCount] = useState(0);
   const workerRef = useRef<Worker | null>(null);
   const runtimeReadyRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -843,6 +918,9 @@ export default function Home() {
   const dataStaleRef = useRef(false);
   const staleCapturePromiseRef = useRef<Promise<Record<string, string>> | null>(null);
   const storageWritesRef = useRef<Promise<void>>(Promise.resolve());
+  const localLibraryWritesRef = useRef<Promise<void>>(Promise.resolve());
+  const libraryMutationsPausedRef = useRef(false);
+  const mistakeBookSelectionSequenceRef = useRef(0);
   const queuedStudyValueRef = useRef<string | null>(null);
   const latestStudyValueRef = useRef("");
   const hydratedRef = useRef(false);
@@ -870,6 +948,7 @@ export default function Home() {
   const backupBusy = backupOperation !== "idle";
   const settingsBusy = backupBusy || reminderSaving;
   const studyEditingBlocked = storageReadOnly || staleStudyData;
+  const localLibraryEditingBlocked = studyEditingBlocked || settingsBusy;
   const nativeSettingsDialogRef = useDialogFocus<HTMLElement>(showNativeSettings, () => {
     if (!settingsBusy) setShowNativeSettings(false);
   });
@@ -896,8 +975,24 @@ export default function Home() {
     [displayProblems, selectedId],
   );
   const currentRecord = normalizeStudyRecord(currentProblem, records[currentProblem.id]);
+  const currentNoteImages = noteImagesForProblem(noteImageStore, currentProblem.id);
+  const totalNoteImages = noteImageCount(noteImageStore);
   const currentDetail = localizeDetail(currentProblem, language);
   const officialProblemUrl = `${language === "zh" ? "https://leetcode.cn" : "https://leetcode.com"}/problems/${currentProblem.slug}/description/`;
+  const currentMistakeSeed: CurrentProblemMistakeSeed = {
+    problemId: currentProblem.id,
+    title: `${currentProblem.id}. ${currentProblem.title}`,
+    sourceUrl: officialProblemUrl,
+    prompt: [
+      currentDetail.statement,
+      currentDetail.requirements.length
+        ? `${language === "zh" ? "要求" : "Requirements"}:\n${currentDetail.requirements.map((item) => `- ${item}`).join("\n")}`
+        : "",
+      `${language === "zh" ? "示例" : "Example"}: ${currentProblem.example}`,
+    ].filter(Boolean).join("\n\n"),
+    language: "python",
+    myAnswer: currentRecord.code,
+  };
   const serializedStudyValue = JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId });
   const codeLines = currentRecord.code.split("\n");
   const emptyRecoveryNeedsConfirmation = starterRecoveryNeedsConfirmation(currentRecord.code, currentRecord.lineNotes);
@@ -1016,7 +1111,7 @@ export default function Home() {
           if (requestedNavigation.problemId) setSelectedId(requestedNavigation.problemId);
         }
 
-        const [savedLanguage, saved, savedFontSizeValue, savedProfile, savedReminder] = await withInitialStudyDataReadLock(async () => {
+        const [savedLanguage, saved, savedFontSizeValue, savedProfile, savedReminder, savedNoteImages, savedMistakeBook] = await withInitialStudyDataReadLock(async () => {
           await configureNativeAppearance();
           return Promise.all([
             getStoredValue(LANGUAGE_KEY),
@@ -1024,6 +1119,8 @@ export default function Home() {
             getStoredValue(FONT_SIZE_KEY),
             getStoredValue(PROFILE_KEY),
             loadDailyReminder(),
+            getLargeStoredValue(NOTE_IMAGES_STORAGE_KEY),
+            getLargeStoredValue(MISTAKE_BOOK_STORAGE_KEY),
           ]);
         });
         if (cancelled) return;
@@ -1066,6 +1163,27 @@ export default function Home() {
           }
           loadedProfile = loaded;
           setProfile(loaded);
+        }
+        try {
+          const loadedNoteImages = savedNoteImages === null
+            ? emptyNoteImageStore()
+            : parseNoteImageStore(JSON.parse(savedNoteImages), KNOWN_PROBLEM_IDS);
+          setNoteImageStore(loadedNoteImages);
+          markNoteImageStoreLoaded(loadedNoteImages);
+        } catch {
+          // Never normalize-and-overwrite a damaged image library. Keep it read-only
+          // so the user can rescue text notes without losing the original value.
+          setNoteImagesLoadFailed(true);
+        }
+        try {
+          const loadedMistakeBook = savedMistakeBook === null
+            ? emptyMistakeBookStore()
+            : parseMistakeBookStore(JSON.parse(savedMistakeBook));
+          setMistakeBookStore(loadedMistakeBook);
+          markMistakeBookStoreLoaded(loadedMistakeBook);
+        } catch {
+          // Keep a malformed library untouched instead of silently repairing it.
+          setMistakeBookLoadFailed(true);
         }
         setDailyReminder(savedReminder);
         queuedStudyValueRef.current = JSON.stringify({
@@ -1145,6 +1263,7 @@ export default function Home() {
       runFeedbackFrameRef.current = null;
 
       setAppMode(navigation.mode);
+      setShowMistakeBook(false);
       if (navigation.problemId) setSelectedId(navigation.problemId);
       setRunState({
         phase: "idle",
@@ -1468,6 +1587,7 @@ export default function Home() {
 
   function openProblemFromPath(id: number) {
     void loadCodeEditor();
+    setShowMistakeBook(false);
     chooseProblem(id, false);
     setAppMode("workspace");
     writeNavigationState({ mode: "workspace", problemId: id }, "push");
@@ -1545,6 +1665,7 @@ export default function Home() {
     if (nextMode === "workspace") void loadCodeEditor();
     if (nextMode === "course") void loadCourseNotes();
     if (nextMode !== "workspace") cancelActiveRun();
+    setShowMistakeBook(false);
     setAppMode(nextMode);
     writeNavigationState({
       mode: nextMode,
@@ -1553,6 +1674,17 @@ export default function Home() {
     setShowProblemList(false);
     setShowNotesDrawer(false);
     if (nextMode === "workspace" && appMode !== "workspace") setMobileWorkspaceTab("library");
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+  }
+
+  function openMistakeBook() {
+    void playSelectionHaptic();
+    void loadMistakeBookPanel();
+    cancelActiveRun();
+    setMistakeBookMounted(true);
+    setShowMistakeBook(true);
+    setShowProblemList(false);
+    setShowNotesDrawer(false);
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
@@ -1609,8 +1741,8 @@ export default function Home() {
       .filter(Boolean)
       .join("\n");
     const headings = language === "zh"
-      ? { code: "我的代码", lines: "每一行代码是什么意思", thinking: "解题思路", mistakes: "卡住或写错", review: "下次识别信号" }
-      : { code: "My code", lines: "What each line means", thinking: "Approach", mistakes: "Mistakes", review: "Pattern to recognize" };
+      ? { code: "我的代码", lines: "每一行代码是什么意思", thinking: "解题思路", mistakes: "卡住或写错", review: "下次识别信号", images: "图片笔记" }
+      : { code: "My code", lines: "What each line means", thinking: "Approach", mistakes: "Mistakes", review: "Pattern to recognize", images: "Image notes" };
 
     return [
       `${currentProblem.id}. ${currentProblem.title}`,
@@ -1620,6 +1752,9 @@ export default function Home() {
       currentRecord.thinking.trim() ? `\n${headings.thinking}\n\n${currentRecord.thinking.trim()}` : "",
       currentRecord.mistakes.trim() ? `\n${headings.mistakes}\n\n${currentRecord.mistakes.trim()}` : "",
       currentRecord.review.trim() ? `\n${headings.review}\n\n${currentRecord.review.trim()}` : "",
+      currentNoteImages.length
+        ? `\n${headings.images}\n\n${language === "zh" ? `${currentNoteImages.length} 张（文字分享不含图片；完整备份会包含）` : `${currentNoteImages.length} (images are excluded from text sharing and included in full backups)`}`
+        : "",
     ].filter(Boolean).join("\n");
   }
 
@@ -1632,15 +1767,25 @@ export default function Home() {
     setShareMessage(result === "shared" ? copy.shareSuccess : result === "copied" ? copy.shareCopied : copy.shareUnavailable);
   }
 
-  function currentStoredSnapshot(courseValue: string): StoredStudySnapshot {
+  function currentStoredSnapshot(
+    courseValue: string,
+    noteImagesValue: string,
+    mistakeBookValue: string,
+    captionDraftsValue: string | null,
+  ): StoredStudySnapshot {
     return {
       values: {
         [STORAGE_KEY]: JSON.stringify({ version: STUDY_STORAGE_VERSION, records, selectedId }),
         [PROFILE_KEY]: JSON.stringify(profile),
         [FONT_SIZE_KEY]: String(fontSize),
         [LANGUAGE_KEY]: language,
+        [NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY]: captionDraftsValue,
       },
-      largeValues: { [COURSE_NOTES_STORAGE_KEY]: courseValue },
+      largeValues: {
+        [COURSE_NOTES_STORAGE_KEY]: courseValue,
+        [NOTE_IMAGES_STORAGE_KEY]: noteImagesValue,
+        [MISTAKE_BOOK_STORAGE_KEY]: mistakeBookValue,
+      },
       reminder: dailyReminder,
     };
   }
@@ -1652,13 +1797,22 @@ export default function Home() {
         [PROFILE_KEY]: JSON.stringify(backup.profile),
         [FONT_SIZE_KEY]: String(backup.font),
         [LANGUAGE_KEY]: backup.language,
+        [NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY]: null,
       },
-      largeValues: { [COURSE_NOTES_STORAGE_KEY]: JSON.stringify(backup.course) },
+      largeValues: {
+        [COURSE_NOTES_STORAGE_KEY]: JSON.stringify(backup.course),
+        [NOTE_IMAGES_STORAGE_KEY]: JSON.stringify(backup.noteImages),
+        [MISTAKE_BOOK_STORAGE_KEY]: JSON.stringify(backup.mistakeBook),
+      },
       reminder: backup.reminder,
     };
   }
 
-  function backupFromCourseValue(courseValue: string | null): StudyBackup {
+  function backupFromStoredValues(
+    courseValue: string | null,
+    images: NoteImageStore,
+    mistakes: MistakeBookStore = latestMistakeBookStoreSnapshot() ?? mistakeBookStore,
+  ): StudyBackup {
     return createStudyBackup({
       study: { version: STUDY_STORAGE_VERSION, records, selectedId },
       profile,
@@ -1666,6 +1820,8 @@ export default function Home() {
       language,
       reminder: dailyReminder,
       course: parseStoredJson(courseValue),
+      noteImages: images,
+      mistakeBook: mistakes,
     }, problems);
   }
 
@@ -1693,22 +1849,33 @@ export default function Home() {
   async function handleExportBackup() {
     if (!hydrated || settingsBusy) return;
     const rescueMode = dataStaleRef.current;
+    libraryMutationsPausedRef.current = true;
     setBackupOperation("exporting");
     setBackupMessageIsError(false);
     setBackupMessage(copy.backupPreparing);
     try {
+      if (noteImagesLoadFailed || mistakeBookLoadFailed) {
+        setBackupMessageIsError(true);
+        setBackupMessage(copy.localLibraryBackupBlocked);
+        return;
+      }
       if (!rescueMode && !await ensureSingleStudyTab()) return;
       await storageWritesRef.current.catch(() => undefined);
+      await localLibraryWritesRef.current.catch(() => undefined);
       const mountedValues = rescueMode
         ? await (staleCapturePromiseRef.current ?? Promise.resolve<Record<string, string>>({}))
         : await captureMountedStudyData();
       await drainCourseStoreWrites().catch(() => undefined);
+      await drainNoteImageStoreWrites().catch(() => undefined);
+      await drainMistakeBookStoreWrites().catch(() => undefined);
       const courseValue = mountedValues[COURSE_NOTES_STORAGE_KEY]
         ?? latestCourseStoreSnapshot()
         ?? (rescueMode
           ? await withStudyDataRescueReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY))
           : await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY)));
-      const backup = backupFromCourseValue(courseValue);
+      const imageStore = latestNoteImageStoreSnapshot() ?? noteImageStore;
+      const mistakeStore = latestMistakeBookStoreSnapshot() ?? mistakeBookStore;
+      const backup = backupFromStoredValues(courseValue, imageStore, mistakeStore);
       const result = await exportStudyBackupFile(
         `tijiebu-${rescueMode ? "rescue" : "backup"}-${backup.exportedAt.slice(0, 10)}.json`,
         stringifyStudyBackup(backup),
@@ -1721,6 +1888,7 @@ export default function Home() {
       setBackupMessageIsError(true);
       setBackupMessage(error instanceof StudyBackupError ? backupErrorMessage(error) : copy.backupFailed);
     } finally {
+      libraryMutationsPausedRef.current = false;
       setBackupOperation("idle");
     }
   }
@@ -1740,10 +1908,14 @@ export default function Home() {
       const backup = parseStudyBackup(await file.text(), problems);
       const mountedValues = await captureMountedStudyData();
       await drainCourseStoreWrites().catch(() => undefined);
+      await drainNoteImageStoreWrites().catch(() => undefined);
+      await drainMistakeBookStoreWrites().catch(() => undefined);
       const currentCourseValue = mountedValues[COURSE_NOTES_STORAGE_KEY]
         ?? latestCourseStoreSnapshot()
         ?? await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY));
       setCurrentCourseCount(normalizeCourseStore(parseStoredJson(currentCourseValue)).courses.length);
+      setCurrentImageCount(noteImageCount(latestNoteImageStoreSnapshot() ?? noteImageStore));
+      setCurrentMistakeCount((latestMistakeBookStoreSnapshot() ?? mistakeBookStore).entries.length);
       setPendingBackup(backup);
       setBackupMessage(copy.backupReady);
       window.requestAnimationFrame(() => backupReviewHeadingRef.current?.focus());
@@ -1761,28 +1933,43 @@ export default function Home() {
     const backup = pendingBackup;
     let paused = false;
 
+    libraryMutationsPausedRef.current = true;
     setBackupOperation("restoring");
     setBackupMessageIsError(false);
     setBackupMessage(copy.restoringBackup);
     try {
       if (!await ensureSingleStudyTab()) {
+        libraryMutationsPausedRef.current = false;
         setBackupOperation("idle");
         return;
       }
       dataOperationRef.current = true;
       saveSequenceRef.current += 1;
       await storageWritesRef.current;
+      await localLibraryWritesRef.current;
       await flushMountedStudyData();
       await drainCourseStoreWrites();
+      await drainNoteImageStoreWrites();
+      await drainMistakeBookStoreWrites();
       pauseMountedStudyData();
       paused = true;
       const restoreResult = await withExclusiveStudyDataOperation(async () => {
         advanceStudyDataRevision();
         const previousCourseValue = await getLargeStoredValue(COURSE_NOTES_STORAGE_KEY)
           ?? JSON.stringify(normalizeCourseStore(undefined));
+        const previousNoteImagesValue = await getLargeStoredValue(NOTE_IMAGES_STORAGE_KEY)
+          ?? JSON.stringify(emptyNoteImageStore());
+        const previousMistakeBookValue = await getLargeStoredValue(MISTAKE_BOOK_STORAGE_KEY)
+          ?? JSON.stringify(emptyMistakeBookStore());
+        const previousCaptionDraftsValue = await getStoredValue(NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY);
         return restoreStudySnapshot(
           importedStoredSnapshot(backup),
-          currentStoredSnapshot(previousCourseValue),
+          currentStoredSnapshot(
+            previousCourseValue,
+            previousNoteImagesValue,
+            previousMistakeBookValue,
+            previousCaptionDraftsValue,
+          ),
           {
             write: writeStoredStudySnapshot,
             finalize: cancelReminderAfterRestore,
@@ -1795,6 +1982,7 @@ export default function Home() {
           dataOperationRef.current = false;
           resumeMountedStudyData();
           paused = false;
+          libraryMutationsPausedRef.current = false;
           setSaveState("saved");
           setBackupOperation("idle");
           setBackupMessage(copy.restoreRolledBack);
@@ -1809,12 +1997,15 @@ export default function Home() {
       setBackupMessage(copy.restoreSuccess(
         Object.keys(backup.study.records).length,
         backup.course.courses.length,
+        noteImageCount(backup.noteImages),
+        backup.mistakeBook.entries.length,
       ));
       void playTestHaptic(true);
       window.setTimeout(() => window.location.reload(), 650);
     } catch (error) {
       if (!dataStaleRef.current) {
         dataOperationRef.current = false;
+        libraryMutationsPausedRef.current = false;
         if (paused) resumeMountedStudyData();
         setSaveState("saved");
       }
@@ -1830,24 +2021,29 @@ export default function Home() {
 
   async function handleDeleteStudyData() {
     if (!hydrated || settingsBusy || !window.confirm(copy.deleteConfirm)) return;
+    libraryMutationsPausedRef.current = true;
     setBackupOperation("restoring");
     setBackupMessageIsError(false);
     setBackupMessage(copy.deletingData);
     try {
       if (!await ensureSingleStudyTab()) {
+        libraryMutationsPausedRef.current = false;
         setBackupOperation("idle");
         return;
       }
       dataOperationRef.current = true;
       saveSequenceRef.current += 1;
       await storageWritesRef.current;
+      await localLibraryWritesRef.current;
       await flushMountedStudyData();
       await drainCourseStoreWrites();
+      await drainNoteImageStoreWrites();
+      await drainMistakeBookStoreWrites();
       pauseMountedStudyData();
       const result = await withExclusiveStudyDataOperation(async () => {
         advanceStudyDataRevision();
         return clearStoredStudyData(
-          [STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY, COURSE_NOTES_STORAGE_KEY],
+          [STORAGE_KEY, FONT_SIZE_KEY, PROFILE_KEY, LANGUAGE_KEY, COURSE_NOTES_STORAGE_KEY, NOTE_IMAGES_STORAGE_KEY, NOTE_IMAGE_CAPTION_DRAFTS_STORAGE_KEY, MISTAKE_BOOK_STORAGE_KEY],
           language,
         );
       });
@@ -1859,6 +2055,7 @@ export default function Home() {
     } catch (error) {
       if (!dataStaleRef.current) {
         dataOperationRef.current = false;
+        libraryMutationsPausedRef.current = false;
         resumeMountedStudyData();
         setSaveState("saved");
       }
@@ -1870,6 +2067,125 @@ export default function Home() {
           ? copy.safeRestoreUnavailable
           : copy.deleteFailed);
     }
+  }
+
+  function noteImageFailure(error: unknown): NoteImageActionResult {
+    if (error instanceof NoteImageMutationError) return { ok: false, reason: error.reason };
+    if (error instanceof StudyDataLockUnavailableError) return { ok: false, reason: "blocked" };
+    return { ok: false, reason: "save-failed" };
+  }
+
+  function queueLocalLibraryAction<T>(operation: () => Promise<T>): Promise<T> {
+    const result = localLibraryWritesRef.current.catch(() => undefined).then(operation);
+    localLibraryWritesRef.current = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  async function handleAddNoteImage(image: NoteImageAttachment): Promise<NoteImageActionResult> {
+    if (localLibraryEditingBlocked || libraryMutationsPausedRef.current || noteImagesLoadFailed) {
+      return { ok: false, reason: "blocked" };
+    }
+    try {
+      return await queueLocalLibraryAction(async () => {
+        const next = await queueNoteImageStoreMutation(async (current) => {
+          const result = addNoteImage(current, currentProblem.id, image);
+          if (!result.ok) throw new NoteImageMutationError(result.reason);
+          const courseValue = latestCourseStoreSnapshot()
+            ?? await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY));
+          try {
+            backupFromStoredValues(courseValue, result.store);
+          } catch (error) {
+            if (error instanceof StudyBackupError && error.code === "too-large") {
+              throw new NoteImageMutationError("backup-limit");
+            }
+            throw error;
+          }
+          return result.store;
+        });
+        setNoteImageStore(next);
+        updateRecord({ status: practiceStatusAfterActivity(currentRecord.status, "edit") });
+        return { ok: true };
+      });
+    } catch (error) {
+      return noteImageFailure(error);
+    }
+  }
+
+  async function handleNoteImageCaption(imageId: string, caption: string): Promise<NoteImageActionResult> {
+    if (localLibraryEditingBlocked || libraryMutationsPausedRef.current || noteImagesLoadFailed) {
+      return { ok: false, reason: "blocked" };
+    }
+    try {
+      return await queueLocalLibraryAction(async () => {
+        const next = await queueNoteImageStoreMutation(async (current) => {
+          const result = updateNoteImageCaption(current, currentProblem.id, imageId, caption);
+          if (result === current) return current;
+          const courseValue = latestCourseStoreSnapshot()
+            ?? await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY));
+          try {
+            backupFromStoredValues(courseValue, result);
+          } catch (error) {
+            if (error instanceof StudyBackupError && error.code === "too-large") {
+              throw new NoteImageMutationError("backup-limit");
+            }
+            throw error;
+          }
+          return result;
+        });
+        setNoteImageStore(next);
+        return { ok: true };
+      });
+    } catch (error) {
+      return noteImageFailure(error);
+    }
+  }
+
+  async function handleRemoveNoteImage(imageId: string): Promise<NoteImageActionResult> {
+    if (localLibraryEditingBlocked || libraryMutationsPausedRef.current || noteImagesLoadFailed) {
+      return { ok: false, reason: "blocked" };
+    }
+    try {
+      return await queueLocalLibraryAction(async () => {
+        const next = await queueNoteImageStoreMutation((current) => (
+          removeNoteImage(current, currentProblem.id, imageId)
+        ));
+        setNoteImageStore(next);
+        return { ok: true };
+      });
+    } catch (error) {
+      return noteImageFailure(error);
+    }
+  }
+
+  async function handleSaveMistakeEntry(entry: MistakeEntry): Promise<void> {
+    if (localLibraryEditingBlocked || libraryMutationsPausedRef.current || mistakeBookLoadFailed) {
+      throw new Error("The mistake book is read-only.");
+    }
+    await queueLocalLibraryAction(async () => {
+      const next = await queueMistakeBookStoreMutation(async (current) => {
+        const result = upsertMistakeEntry(current, entry);
+        if (!result.ok) throw new Error(`Invalid mistake entry at ${result.issue.field}.`);
+        const courseValue = latestCourseStoreSnapshot()
+          ?? await withStudyDataReadLock(() => getLargeStoredValue(COURSE_NOTES_STORAGE_KEY));
+        backupFromStoredValues(
+          courseValue,
+          latestNoteImageStoreSnapshot() ?? noteImageStore,
+          result.store,
+        );
+        return result.store;
+      });
+      setMistakeBookStore(next);
+    });
+  }
+
+  async function handleDeleteMistakeEntry(entryId: string): Promise<void> {
+    if (localLibraryEditingBlocked || libraryMutationsPausedRef.current || mistakeBookLoadFailed) {
+      throw new Error("The mistake book is read-only.");
+    }
+    await queueLocalLibraryAction(async () => {
+      const next = await queueMistakeBookStoreMutation((current) => removeMistakeEntry(current, entryId));
+      setMistakeBookStore(next);
+    });
   }
 
   function updateLineNote(index: number, value: string) {
@@ -1920,13 +2236,17 @@ export default function Home() {
     if (compact) scrollRunFeedbackIntoView();
   }
 
-  function saveFailedTestToReview(result: WorkerTestResult) {
+  function failedTestReviewNote(result: WorkerTestResult): string {
     const sourceTest = currentProblem.tests[result.index];
     const input = language === "en"
       ? result.expression
       : (sourceTest?.inputLabel ?? result.expression);
     const detail = describeFirstMismatch(result.expected, result.actual, language);
-    const note = copy.failedTestNote(result.index + 1, input, pretty(result.expected), pretty(result.actual), detail);
+    return copy.failedTestNote(result.index + 1, input, pretty(result.expected), pretty(result.actual), detail);
+  }
+
+  function saveFailedTestToReview(result: WorkerTestResult) {
+    const note = failedTestReviewNote(result);
     const existing = currentRecord.mistakes.trim();
     updateRecord({
       mistakes: existing.includes(note) ? existing : [existing, note].filter(Boolean).join("\n\n"),
@@ -1934,6 +2254,39 @@ export default function Home() {
     });
     setNoteTab("review");
     openNotesDrawer();
+  }
+
+  async function saveFailedTestToMistakeBook(result: WorkerTestResult) {
+    try {
+      // A panel save may already be queued while the learner returns to the
+      // failed test. Build from the last verified store so this shortcut never
+      // restores an older root-cause or reference-answer draft.
+      await localLibraryWritesRef.current;
+      const note = failedTestReviewNote(result);
+      const fresh = createCurrentProblemMistake(currentMistakeSeed);
+      const currentMistakes = latestMistakeBookStoreSnapshot() ?? mistakeBookStore;
+      const existing = currentMistakes.entries.find((entry) => entry.id === fresh.id);
+      const entry: MistakeEntry = existing
+        ? {
+          ...existing,
+          title: fresh.title,
+          sourceUrl: fresh.sourceUrl,
+          prompt: fresh.prompt,
+          myAnswer: currentRecord.code,
+          rootCause: existing.rootCause.trim() ? existing.rootCause : note,
+          status: existing.status === "mastered" ? "reviewing" : existing.status,
+          updatedAt: Math.max(fresh.updatedAt, existing.updatedAt + 1),
+        }
+        : { ...fresh, rootCause: note, status: "reviewing" };
+      await handleSaveMistakeEntry(entry);
+      setMistakeBookSelectionRequest({
+        entryId: entry.id,
+        sequence: ++mistakeBookSelectionSequenceRef.current,
+      });
+      openMistakeBook();
+    } catch {
+      saveFailedTestToReview(result);
+    }
   }
 
   function fillLineNotes() {
@@ -2238,9 +2591,10 @@ export default function Home() {
         <div className="header-actions">
           <span className={`save-state ${saveState === "saving" ? headerStyles.saveSaving : saveState === "error" ? headerStyles.saveError : ""}`} role="status"><i />{visibleSaveLabel}</span>
           <nav className="app-mode-nav" aria-label={copy.appNavigation}>
-            <button type="button" className={appMode === "path" ? "is-active" : ""} aria-current={appMode === "path" ? "page" : undefined} disabled={studyEditingBlocked} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
-            <button type="button" className={appMode === "workspace" ? "is-active" : ""} aria-current={appMode === "workspace" ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadCodeEditor(); }} onFocus={() => { void loadCodeEditor(); }} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
-            <button type="button" className={appMode === "course" ? "is-active" : ""} aria-current={appMode === "course" ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadCourseNotes(); }} onFocus={() => { void loadCourseNotes(); }} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
+            <button type="button" className={!showMistakeBook && appMode === "path" ? "is-active" : ""} aria-current={!showMistakeBook && appMode === "path" ? "page" : undefined} disabled={studyEditingBlocked} onClick={() => showAppMode("path")}>{copy.learningPath}</button>
+            <button type="button" className={!showMistakeBook && appMode === "workspace" ? "is-active" : ""} aria-current={!showMistakeBook && appMode === "workspace" ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadCodeEditor(); }} onFocus={() => { void loadCodeEditor(); }} onClick={() => showAppMode("workspace")}>{copy.freePractice}</button>
+            <button type="button" className={!showMistakeBook && appMode === "course" ? "is-active" : ""} aria-current={!showMistakeBook && appMode === "course" ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadCourseNotes(); }} onFocus={() => { void loadCourseNotes(); }} onClick={() => showAppMode("course")}>{copy.courseNotes}</button>
+            <button type="button" className={showMistakeBook ? "is-active" : ""} aria-current={showMistakeBook ? "page" : undefined} disabled={studyEditingBlocked} onMouseEnter={() => { void loadMistakeBookPanel(); }} onFocus={() => { void loadMistakeBookPanel(); }} onClick={openMistakeBook}>{copy.mistakeBook}</button>
           </nav>
           <div className="language-toggle" role="group" aria-label="Language / 语言">
             <button type="button" lang="zh-CN" className={language === "zh" ? "is-active" : ""} disabled={studyEditingBlocked} onClick={() => selectLanguage("zh")}>中文</button>
@@ -2329,7 +2683,24 @@ export default function Home() {
         </div>
       )}
 
-      {hydrated && !studyEditingBlocked && (
+      {hydrated && mistakeBookMounted && (
+        <div hidden={!showMistakeBook}>
+          <Suspense fallback={<div className={headerStyles.modeLoading} role="status">{copy.mistakeBookLoading}</div>}>
+            {mistakeBookLoadFailed && <p className={backupStyles.safetyBanner} role="alert">{copy.mistakeBookLoadFailed}</p>}
+            <MistakeBookPanel
+              language={language}
+              entries={mistakeBookStore.entries}
+              currentProblem={currentMistakeSeed}
+              selectionRequest={mistakeBookSelectionRequest}
+              disabled={localLibraryEditingBlocked || mistakeBookLoadFailed}
+              onSave={handleSaveMistakeEntry}
+              onDelete={handleDeleteMistakeEntry}
+            />
+          </Suspense>
+        </div>
+      )}
+
+      {hydrated && !studyEditingBlocked && !showMistakeBook && (
       <div>
       {appMode === "path" ? (
         <div ref={studyHomeRef} tabIndex={-1} role="region" aria-label={copy.learningPath}>
@@ -2793,7 +3164,7 @@ export default function Home() {
                 <div className={ideStyles.coachActions}>
                   <button type="button" onClick={() => focusCodeLine(safeActiveCodeLine)}>{copy.backToEditor}</button>
                   <button type="button" aria-expanded={coreIdeaLocation === "wrong"} aria-controls={`wrong-core-idea-${currentProblem.id}`} onClick={() => setCoreIdeaLocation((current) => current === "wrong" ? null : "wrong")}>{coreIdeaLocation === "wrong" ? copy.hideCoreIdea : copy.showCoreIdea}</button>
-                  <button type="button" onClick={() => saveFailedTestToReview(firstWrongAnswer)}>{copy.saveFailedReview}</button>
+                  <button type="button" onClick={() => void saveFailedTestToMistakeBook(firstWrongAnswer)}>{copy.saveFailedReview}</button>
                 </div>
               </div>
             )}
@@ -2953,6 +3324,20 @@ export default function Home() {
           >
             <button id="line-notes-tab" type="button" role="tab" tabIndex={noteTab === "line" ? 0 : -1} aria-selected={noteTab === "line"} aria-controls="line-notes-panel" className={noteTab === "line" ? "is-active" : ""} onClick={() => setNoteTab("line")}>{copy.lineNotes}</button>
             <button id="review-notes-tab" type="button" role="tab" tabIndex={noteTab === "review" ? 0 : -1} aria-selected={noteTab === "review"} aria-controls="review-notes-panel" className={noteTab === "review" ? "is-active" : ""} onClick={() => setNoteTab("review")}>{copy.reflection}</button>
+            <button
+              id="image-notes-tab"
+              type="button"
+              role="tab"
+              tabIndex={noteTab === "images" ? 0 : -1}
+              aria-selected={noteTab === "images"}
+              aria-controls="image-notes-panel"
+              className={noteTab === "images" ? "is-active" : ""}
+              onMouseEnter={() => { void loadNoteImagePanel(); }}
+              onFocus={() => { void loadNoteImagePanel(); }}
+              onClick={() => { void loadNoteImagePanel(); setNoteTab("images"); }}
+            >
+              {copy.imageNotes(currentNoteImages.length)}
+            </button>
           </div>
 
           <div className="mobile-notes-context">
@@ -3028,7 +3413,7 @@ export default function Home() {
                 })}
               </div>
             </div>
-          ) : (
+          ) : noteTab === "review" ? (
             <div id="review-notes-panel" role="tabpanel" aria-labelledby="review-notes-tab" className="review-notes-view">
               <label>
                 <span><b>1</b> {copy.thinkingTitle}</span>
@@ -3045,6 +3430,22 @@ export default function Home() {
                 <small>{copy.reviewHelp}</small>
                 <textarea ref={recognitionSignalRef} rows={5} value={currentRecord.review} onChange={(event) => updateRecord({ review: event.target.value, status: practiceStatusAfterActivity(currentRecord.status, "edit") })} placeholder={copy.reviewPlaceholder} />
               </label>
+            </div>
+          ) : (
+            <div id="image-notes-panel" role="tabpanel" aria-labelledby="image-notes-tab">
+              <Suspense fallback={<p role="status">{copy.imageNotesLoading}</p>}>
+                <NoteImagePanel
+                  language={language}
+                  problemTitle={`${currentProblem.id}. ${currentProblem.title}`}
+                  images={currentNoteImages}
+                  totalImages={totalNoteImages}
+                  disabled={localLibraryEditingBlocked}
+                  unavailable={noteImagesLoadFailed}
+                  onAdd={handleAddNoteImage}
+                  onCaption={handleNoteImageCaption}
+                  onRemove={handleRemoveNoteImage}
+                />
+              </Suspense>
             </div>
           )}
 
@@ -3127,8 +3528,8 @@ export default function Home() {
                   <dl>
                     <div><dt>{copy.backupCreated}</dt><dd>{new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(pendingBackup.exportedAt))}</dd></div>
                   </dl>
-                  <p>{copy.backupContains(Object.keys(pendingBackup.study.records).length, pendingBackup.course.courses.length, pendingBackup.profile.xp)}</p>
-                  <p>{copy.currentContains(Object.keys(records).length, currentCourseCount)}</p>
+                  <p>{copy.backupContains(Object.keys(pendingBackup.study.records).length, pendingBackup.course.courses.length, noteImageCount(pendingBackup.noteImages), pendingBackup.mistakeBook.entries.length, pendingBackup.profile.xp)}</p>
+                  <p>{copy.currentContains(Object.keys(records).length, currentCourseCount, currentImageCount, currentMistakeCount)}</p>
                   <strong className={backupStyles.warning}>{copy.restoreWarning}</strong>
                   <div className={backupStyles.reviewActions}>
                     <button type="button" className="button button-quiet" onClick={handleExportBackup} disabled={settingsBusy}>{copy.exportCurrentFirst}</button>

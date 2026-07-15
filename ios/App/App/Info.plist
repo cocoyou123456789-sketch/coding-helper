@@ -26,6 +26,10 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于在你主动开始听写时，把口述内容转换为学习笔记；题解簿不会保存录音。 Used only after you start dictation to turn speech into study notes; the app does not save audio.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>仅在你主动添加题目图片笔记时，用于从照片图库选择图片；图片默认只保存在本机，只有你主动导出完整备份时才会写入备份文件。 Used only when you add a problem image note to choose a photo; images stay on this device unless you explicitly export a full backup.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>仅在你主动添加题目图片笔记并选择拍照时使用相机；图片默认只保存在本机，只有你主动导出完整备份时才会写入备份文件。 Used only when you choose to take a photo for a problem image note; images stay on this device unless you explicitly export a full backup.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>用于把你主动开始的听写转换为可编辑文字；旧版 iOS 可能由 Apple 语音服务处理。 Used to turn dictation you start into editable text; older iOS versions may use Apple speech services.</string>
 	<key>UILaunchStoryboardName</key>
