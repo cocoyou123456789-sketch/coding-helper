@@ -11,7 +11,7 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
     readFile(file("ios/App/App/public/index.html"), "utf8"),
     readFile(file("capacitor.config.ts"), "utf8"),
     readFile(file("ios/App/App/capacitor.config.json"), "utf8"),
-    readFile(file("ios/App/App/public/python-worker-signature-v1.js"), "utf8"),
+    readFile(file("ios/App/App/public/python-worker-trace-v2.js"), "utf8"),
     readFile(file("ios/App/App/PrivacyInfo.xcprivacy"), "utf8"),
     readFile(file("ios/App/CapApp-SPM/Package.swift"), "utf8"),
     readFile(file("ios/App/App/Info.plist"), "utf8"),
@@ -31,8 +31,9 @@ test("the iOS bundle is local, branded independently, and App Store ready", asyn
   assert.doesNotMatch(nativeHtml, /course-notes-[^"']+\.js/);
   assert.doesNotMatch(nativeHtml, /note-image-panel-[^"']+\.js/);
   assert.doesNotMatch(nativeHtml, /mistake-book-panel-[^"']+\.js/);
+  assert.doesNotMatch(nativeHtml, /execution-visualizer-[^"']+\.js/);
 
-  for (const moduleId of ["app/leetcode-code-editor.tsx", "app/course-notes.tsx", "app/note-image-panel.tsx", "app/mistake-book-panel.tsx"]) {
+  for (const moduleId of ["app/leetcode-code-editor.tsx", "app/course-notes.tsx", "app/note-image-panel.tsx", "app/mistake-book-panel.tsx", "app/execution-visualizer.tsx"]) {
     const entry = manifest[moduleId];
     assert.equal(entry?.isDynamicEntry, true);
     await stat(file(`ios/App/App/public/${entry.file}`));

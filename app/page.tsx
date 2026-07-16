@@ -134,10 +134,12 @@ import { useDialogFocus } from "./use-dialog-focus";
 
 const loadCourseNotes = () => import("./course-notes");
 const loadCodeEditor = () => import("./leetcode-code-editor");
+const loadExecutionVisualizer = () => import("./execution-visualizer");
 const loadMistakeBookPanel = () => import("./mistake-book-panel");
 const loadNoteImagePanel = () => import("./note-image-panel");
 const CourseNotes = lazy(loadCourseNotes);
 const LeetCodeCodeEditor = lazy(loadCodeEditor);
+const ExecutionVisualizer = lazy(loadExecutionVisualizer);
 const MistakeBookPanel = lazy(loadMistakeBookPanel);
 const NoteImagePanel = lazy(loadNoteImagePanel);
 
@@ -975,6 +977,30 @@ export default function Home() {
     [displayProblems, selectedId],
   );
   const currentRecord = normalizeStudyRecord(currentProblem, records[currentProblem.id]);
+  const relatedMistakeEntries = useMemo(() => {
+    const currentEntryId = `current-${currentProblem.id}`;
+    const matchingPath = `/problems/${currentProblem.slug}`;
+    return mistakeBookStore.entries
+      .filter((entry) => {
+        if (entry.language !== "python") return false;
+        if (entry.id === currentEntryId) return true;
+        try {
+          const pathname = new URL(entry.sourceUrl).pathname.replace(/\/+$/, "");
+          return pathname === matchingPath || pathname.startsWith(`${matchingPath}/`);
+        } catch {
+          return false;
+        }
+      })
+      .sort((first, second) => {
+        if (first.id === currentEntryId) return -1;
+        if (second.id === currentEntryId) return 1;
+        return second.updatedAt - first.updatedAt;
+      });
+  }, [currentProblem.id, currentProblem.slug, mistakeBookStore.entries]);
+  const currentReferenceAnswer = relatedMistakeEntries.find((entry) => entry.referenceAnswer.trim())?.referenceAnswer ?? "";
+  const currentSavedLearnerAnswer = relatedMistakeEntries.find(
+    (entry) => entry.myAnswer.trim() && entry.myAnswer.trim() !== currentRecord.code.trim(),
+  )?.myAnswer ?? relatedMistakeEntries.find((entry) => entry.myAnswer.trim())?.myAnswer ?? "";
   const currentNoteImages = noteImagesForProblem(noteImageStore, currentProblem.id);
   const totalNoteImages = noteImageCount(noteImageStore);
   const currentDetail = localizeDetail(currentProblem, language);
@@ -2428,7 +2454,7 @@ export default function Home() {
 
     const requestId = `${currentProblem.id}:${++runSequenceRef.current}`;
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-    const worker = workerRef.current ?? new Worker(`${basePath}/python-worker-signature-v1.js`);
+    const worker = workerRef.current ?? new Worker(`${basePath}/python-worker-trace-v2.js`);
     workerRef.current = worker;
     setStarterPromptLine(null);
     setSourceIssue(null);
@@ -3040,6 +3066,27 @@ export default function Home() {
             </div>
             <div className="editor-actions">
               <button className="dark-button" type="button" onClick={resetCode}>{copy.resetCode}</button>
+              <Suspense fallback={null}>
+                <ExecutionVisualizer
+                  key={currentProblem.id}
+                  problemId={currentProblem.id}
+                  problemTitle={currentProblem.title}
+                  code={currentRecord.code}
+                  savedLearnerAnswer={currentSavedLearnerAnswer}
+                  savedReferenceAnswer={currentReferenceAnswer}
+                  tests={currentProblem.tests}
+                  signature={currentProblem.signature}
+                  language={language}
+                  preferredTestIndex={firstFailedResult?.index ?? 0}
+                  disabled={runState.phase === "running"}
+                  workerRef={workerRef}
+                  runtimeReadyRef={runtimeReadyRef}
+                  timeoutRef={timeoutRef}
+                  runSequenceRef={runSequenceRef}
+                  activeRunRef={activeRunRef}
+                  onOpenMistakeBook={openMistakeBook}
+                />
+              </Suspense>
               <button className="run-button" type="button" onClick={() => runTests()} disabled={runState.phase === "running"}>
                 <span aria-hidden="true">▶</span>{runState.phase === "running" ? copy.running : copy.run}
               </button>

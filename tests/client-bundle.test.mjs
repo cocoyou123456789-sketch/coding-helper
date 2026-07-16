@@ -10,11 +10,14 @@ test("heavy practice and course features stay out of the study-home bundle", asy
   const page = manifest["app/page.tsx"];
   const editor = manifest["app/leetcode-code-editor.tsx"];
   const course = manifest["app/course-notes.tsx"];
+  const visualizer = manifest["app/execution-visualizer.tsx"];
 
   assert.ok(page?.dynamicImports?.includes("app/leetcode-code-editor.tsx"));
   assert.ok(page?.dynamicImports?.includes("app/course-notes.tsx"));
+  assert.ok(page?.dynamicImports?.includes("app/execution-visualizer.tsx"));
   assert.equal(editor?.isDynamicEntry, true);
   assert.equal(course?.isDynamicEntry, true);
+  assert.equal(visualizer?.isDynamicEntry, true);
 
   const pageFile = new URL(`dist/client/${page.file}`, root);
   const pageSize = (await stat(pageFile)).size;

@@ -42,7 +42,7 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(page, /describeFirstMismatch/);
   assert.match(page, /pythonErrorSummary/);
   assert.match(page, /normalizeSignatureIssue/);
-  assert.match(page, /python-worker-signature-v1\.js/);
+  assert.match(page, /python-worker-trace-v2\.js/);
   assert.match(page, /signature: currentProblem\.signature/);
   assert.match(page, /signatureIssue\?: PythonSignatureIssue/);
   assert.match(page, /copy\.signatureTitle/);
@@ -148,6 +148,53 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /@media \(max-width: 760px\)/);
   assert.match(styles, /\.editorToolbar \{[\s\S]*?position: sticky;[\s\S]*?env\(safe-area-inset-top\)/);
   assert.match(styles, /\.testConsole \{[\s\S]*?scroll-margin-top: calc\(180px \+ env\(safe-area-inset-top\)\)/);
+});
+
+test("the beginner animation replays real Python for both learner and reference code", async () => {
+  const [page, visualizer, visualizerStyles, traceModel, references, worker] = await Promise.all([
+    readFile(file("app/page.tsx"), "utf8"),
+    readFile(file("app/execution-visualizer.tsx"), "utf8"),
+    readFile(file("app/execution-visualizer.module.css"), "utf8"),
+    readFile(file("app/execution-trace.ts"), "utf8"),
+    readFile(file("app/reference-solutions.ts"), "utf8"),
+    readFile(file("public/python-worker-trace-v2.js"), "utf8"),
+  ]);
+
+  assert.match(page, /lazy\(loadExecutionVisualizer\)/);
+  assert.match(page, /savedReferenceAnswer=\{currentReferenceAnswer\}/);
+  assert.match(page, /workerRef=\{workerRef\}/);
+  assert.match(visualizer, /逐行动画/);
+  assert.match(visualizer, /我的代码/);
+  assert.match(visualizer, /一份参考解法/);
+  assert.match(visualizer, /mode: "trace"/);
+  assert.match(visualizer, /normalizeExecutionTraceResult/);
+  assert.match(visualizer, /executionVariableChanges/);
+  assert.match(visualizer, /role="dialog"/);
+  assert.match(visualizer, /aria-current=\{active \? "step"/);
+  assert.match(visualizer, /aria-live=\{playing \? "off" : "polite"\}/);
+  assert.match(visualizer, /prefers-reduced-motion: reduce/);
+  assert.match(visualizer, /当前动画仍使用打开时的代码快照/);
+  assert.match(visualizer, /不能据此判断正确或错误/);
+  assert.doesNotMatch(visualizer, /官方正确答案|唯一标准答案/);
+
+  assert.match(visualizerStyles, /min-height: 44px/);
+  assert.match(visualizerStyles, /height: 100dvh/);
+  assert.match(visualizerStyles, /env\(safe-area-inset-bottom\)/);
+  assert.match(visualizerStyles, /@media \(prefers-reduced-motion: reduce\)/);
+
+  assert.match(traceModel, /MAX_EXECUTION_TRACE_EVENTS = 240/);
+  assert.match(traceModel, /"event-limit" \| "payload-limit"/);
+  assert.match(traceModel, /exception is leaving/);
+  assert.match(references, /\b15:/);
+  assert.match(references, /\b2824:/);
+
+  assert.match(worker, /const PYTHON_TRACE_SUPPORT/);
+  assert.match(worker, /co_filename != "<solution>"/);
+  assert.match(worker, /class ExecutionTraceLimit\(safe_base_exception\)/);
+  assert.match(worker, /"event-limit"/);
+  assert.match(worker, /"payload-limit"/);
+  assert.match(worker, /stopReason:/);
+  assert.match(worker, /value_type is dict_type/);
 });
 
 test("image notes and the mistake book are reachable, local, and mobile friendly", async () => {

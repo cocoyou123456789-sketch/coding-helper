@@ -94,9 +94,9 @@ test("the signature worker path cannot match an older stable worker cache entry"
     async put() {},
   });
 
-  const response = await context.cacheFirst(new Request(`${scope}python-worker-signature-v1.js`));
+  const response = await context.cacheFirst(new Request(`${scope}python-worker-trace-v2.js`));
 
   assert.equal(await response.text(), "new signature worker");
-  assert.deepEqual(fetched, [`${scope}python-worker-signature-v1.js`]);
-  assert.match(workerSource, /appUrl\("python-worker-signature-v1\.js"\)/);
+  assert.deepEqual(fetched, [`${scope}python-worker-trace-v2.js`]);
+  assert.match(workerSource, /appUrl\("python-worker-trace-v2\.js"\)/);
 });

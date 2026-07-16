@@ -1,6 +1,6 @@
 /* global self, caches, fetch, URL, Response */
 
-const CACHE_NAME = "algoquest-pwa-2026-07-16-two-pointer-set-v1";
+const CACHE_NAME = "algoquest-pwa-2026-07-16-execution-trace-v2";
 const RUNTIME_CACHE = "algoquest-runtime-2026-07-15-mistake-book-v1";
 const SCOPE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 const ROOT_URL = `${SCOPE_PATH}/`;
@@ -75,7 +75,7 @@ async function cacheAppShell() {
     appUrl("icons/icon-512.png"),
     appUrl("icons/icon-maskable-512.png"),
     appUrl("python-worker.js"),
-    appUrl("python-worker-signature-v1.js"),
+    appUrl("python-worker-trace-v2.js"),
   ];
 
   await Promise.allSettled(fixedAssets.map(async (url) => {

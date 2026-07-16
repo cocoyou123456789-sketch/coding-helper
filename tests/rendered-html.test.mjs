@@ -51,7 +51,7 @@ test("ships Hot 100 plus five extra problems, course dictation, the Python runne
     readFile(new URL("../app/problem-i18n-a.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-i18n-b.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/problem-i18n-c.ts", import.meta.url), "utf8"),
-    readFile(new URL("../public/python-worker-signature-v1.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/python-worker-trace-v2.js", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8"),
@@ -95,12 +95,14 @@ test("ships Hot 100 plus five extra problems, course dictation, the Python runne
   assert.match(pageSource, /你的代码还没有执行，也没有丢失/);
   assert.match(pageSource, /代码运行太久，先检查循环/);
   assert.match(pageSource, /先恢复原题要求的代码入口/);
-  assert.match(pageSource, /python-worker-signature-v1\.js/);
+  assert.match(pageSource, /python-worker-trace-v2\.js/);
   assert.match(pageSource, /workerFailed: "Python 环境暂时无法启动，请重新运行。"/);
   assert.match(pageSource, /保存失败，请先复制重要笔记/);
   assert.match(pageSource, /saveErrorBanner/);
   assert.match(pageSource, /mobile-workspace-tabs/);
   assert.match(pageSource, /LeetCodeCodeEditor/);
+  assert.match(pageSource, /ExecutionVisualizer/);
+  assert.match(pageSource, /lazy\(loadExecutionVisualizer\)/);
   assert.match(pageSource, /去 LeetCode 提交/);
   assert.match(pageSource, /practice-ide\.module\.css/);
   assert.match(pageSource, /课程笔记/);
@@ -123,6 +125,9 @@ test("ships Hot 100 plus five extra problems, course dictation, the Python runne
   assert.match(workerSource, /missing_method/);
   assert.match(workerSource, /incompatible_parameters/);
   assert.match(workerSource, /globals\(\)\[__method_name\] = getattr/);
+  assert.match(workerSource, /PYTHON_TRACE_SUPPORT/);
+  assert.match(workerSource, /co_filename != "<solution>"/);
+  assert.match(workerSource, /"event-limit"/);
   assert.match(serviceWorkerSource, /self\.registration\.scope/);
   assert.match(serviceWorkerSource, /cacheAppAssetGraph/);
   assert.match(serviceWorkerSource, /appAssetDependencies/);
@@ -132,7 +137,7 @@ test("ships Hot 100 plus five extra problems, course dictation, the Python runne
   assert.equal(manifest.background_color, "#fff7f9");
   assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
-  assert.match(serviceWorkerSource, /2026-07-16-two-pointer-set-v1/);
+  assert.match(serviceWorkerSource, /2026-07-16-execution-trace-v2/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));
