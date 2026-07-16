@@ -224,7 +224,7 @@ const pageCopy = {
   zh: {
     brandName: "题解簿",
     brandSubtitle: "LeetCode Hot 100 + 加练学习手账",
-    nativeBrandSubtitle: "101 道经典算法题学习手账",
+    nativeBrandSubtitle: "105 道经典算法题学习手账",
     progress: "学习进度",
     autosave: "笔记自动保存在本机",
     nativeAutosave: "代码和笔记已保存在这台设备",
@@ -478,7 +478,7 @@ const pageCopy = {
   en: {
     brandName: "AlgoQuest",
     brandSubtitle: "LeetCode Hot 100 + Extra Practice Notebook",
-    nativeBrandSubtitle: "A study notebook for 101 classic algorithm problems",
+    nativeBrandSubtitle: "A study notebook for 105 classic algorithm problems",
     progress: "Progress",
     autosave: "Notes save automatically on this device",
     nativeAutosave: "Code and notes are saved on this device",
@@ -2934,7 +2934,7 @@ export default function Home() {
             <div className={ideStyles.problemTabs}><span>{language === "zh" ? "题目描述" : "Description"}</span></div>
             <div className={ideStyles.problemContent}>
             <div className="brief-topline">
-              <span>{nativeApp ? "ALGORITHM 101" : "HOT 100 + EXTRA"} / {currentProblem.topic}</span>
+              <span>{nativeApp ? "ALGORITHM 105" : "HOT 100 + EXTRA"} / {currentProblem.topic}</span>
               {!nativeApp && (
                 <cite className="problem-source">
                   <a href={officialProblemUrl} target="_blank" rel="noreferrer">

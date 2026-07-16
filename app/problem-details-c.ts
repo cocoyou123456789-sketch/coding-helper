@@ -289,6 +289,34 @@ export const problemDetailsC: Record<number, ProblemDetail> = {
       "结果必须是恰好下一个排列，不能跳过中间可行排列。",
     ],
   },
+  2824: {
+    statement:
+      "统计所有满足 i < j 且 nums[i] + nums[j] < target 的下标对。",
+    requirements: [
+      "1 ≤ n ≤ 50，-50 ≤ nums[i], target ≤ 50；每组 i < j 只计一次，等于 target 时不计数。",
+    ],
+  },
+  16: {
+    statement:
+      "从三个不同位置取数，返回最接近 target 的三数之和。",
+    requirements: [
+      "中文范围：3 ≤ n ≤ 1,000，|nums[i]| ≤ 1,000，|target| ≤ 10,000；使用不同位置并返回唯一的最近和。",
+    ],
+  },
+  18: {
+    statement:
+      "返回四个不同位置之和为 target 的所有不重复数值组合。",
+    requirements: [
+      "1 ≤ n ≤ 200，|nums[i]|, |target| ≤ 10⁹；使用不同位置，相同数值组合只返回一次。",
+    ],
+  },
+  611: {
+    statement:
+      "把三个不同位置的数当作边长，统计有效三角形数量。",
+    requirements: [
+      "1 ≤ n ≤ 1,000，0 ≤ nums[i] ≤ 1,000；不同位置分别计数，并严格满足两短边之和大于最长边。",
+    ],
+  },
   167: {
     statement:
       "给定整数数组 numbers 和目标整数 target。numbers 已按非递减顺序排列，请找出两个不同位置，使这两个位置上的数相加恰好等于 target；返回它们从 1 开始计算的位置 [i, j]，并保证 i 小于 j。",

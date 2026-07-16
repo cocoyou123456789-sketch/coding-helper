@@ -6,12 +6,16 @@ import {
   parseNavigationState,
 } from "../app/navigation-state.ts";
 
-const knownProblemIds = new Set([1, 21, 283]);
+const knownProblemIds = new Set([1, 21, 283, 2824]);
 
 test("navigation search accepts supported modes and only known workspace problems", () => {
   assert.deepEqual(
     parseNavigationState("?mode=workspace&problem=283", knownProblemIds),
     { mode: "workspace", problemId: 283 },
+  );
+  assert.deepEqual(
+    parseNavigationState("?mode=workspace&problem=2824", knownProblemIds),
+    { mode: "workspace", problemId: 2824 },
   );
   assert.deepEqual(
     parseNavigationState("?mode=workspace&problem=999", knownProblemIds),

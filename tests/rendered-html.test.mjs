@@ -38,7 +38,7 @@ test("renders a non-editable hydration shell before local study data is restored
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
-test("ships Hot 100 plus an extra problem, course dictation, the Python runner, and Pages workflow", async () => {
+test("ships Hot 100 plus five extra problems, course dictation, the Python runner, and Pages workflow", async () => {
   const [problemSource, pageSource, courseSource, speechSource, pwaSource, detailA, detailB, detailC, englishA, englishB, englishC, workerSource, serviceWorkerSource, manifestSource, workflowSource] = await Promise.all([
     readFile(new URL("../app/problems.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -58,16 +58,24 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   ]);
   const manifest = JSON.parse(manifestSource);
 
-  assert.equal((problemSource.match(/\bq\(\{ id:/g) ?? []).length, 101);
-  assert.equal(([detailA, detailB, detailC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 101);
-  assert.equal(([englishA, englishB, englishC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 101);
+  assert.equal((problemSource.match(/\bq\(\{ id:/g) ?? []).length, 105);
+  assert.equal(([detailA, detailB, detailC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 105);
+  assert.equal(([englishA, englishB, englishC].join("\n").match(/^  \d+: \{/gm) ?? []).length, 105);
   assert.match(englishA, /title: "Two Sum"/);
   assert.match(problemSource, /id: 32, title: "最长有效括号"/);
   assert.match(problemSource, /id: 167, title: "两数之和 II - 输入有序数组"/);
+  assert.match(problemSource, /id: 2824, title: "统计和小于目标的下标对数目"/);
+  assert.match(problemSource, /id: 16, title: "最接近的三数之和"/);
+  assert.match(problemSource, /id: 18, title: "四数之和"/);
+  assert.match(problemSource, /id: 611, title: "有效三角形的个数"/);
   assert.match(problemSource, /export interface ProblemSignature/);
   assert.match(problemSource, /kind: "solution" \| "design"/);
   assert.match(detailC, /^  167: \{/m);
   assert.match(englishC, /^  167: \{/m);
+  for (const id of [2824, 16, 18, 611]) {
+    assert.match(detailC, new RegExp(`^  ${id}: \\{`, "m"));
+    assert.match(englishC, new RegExp(`^  ${id}: \\{`, "m"));
+  }
   assert.match(pageSource, /运行测试/);
   assert.match(pageSource, /逐行解释|每一行代码是什么意思/);
   assert.match(pageSource, /来源：LeetCode/);
@@ -124,7 +132,7 @@ test("ships Hot 100 plus an extra problem, course dictation, the Python runner, 
   assert.equal(manifest.background_color, "#fff7f9");
   assert.equal(manifest.theme_color, "#b94368");
   assert.equal(manifest.icons.length, 3);
-  assert.match(serviceWorkerSource, /2026-07-15-mistake-book-v1/);
+  assert.match(serviceWorkerSource, /2026-07-16-two-pointer-set-v1/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));

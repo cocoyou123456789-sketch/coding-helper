@@ -101,12 +101,32 @@ export const problems: Problem[] = [
     summary: "找出数组中所有和为零且不重复的三元组。", example: "[-1,0,1,2,-1,-4] → [[-1,-1,2],[-1,0,1]]",
     method: "先排序，枚举第一个数，再用左右指针寻找另外两个数。", params: ["nums"],
     hint: "排序后可以跳过重复值，并根据当前和移动指针。", complexity: "时间 O(n²)，空间 O(1)（不计结果）", functionName: "threeSum",
-    tests: [t("两个答案", "sorted([sorted(x) for x in threeSum([-1,0,1,2,-1,-4])])", [[-1,-1,2],[-1,0,1]]), t("无解", "threeSum([0,1,1])", [])] }),
+    tests: [t("两个答案", "sorted([sorted(x) for x in threeSum([-1,0,1,2,-1,-4])])", [[-1,-1,2],[-1,0,1]]), t("无解", "threeSum([0,1,1])", []), t("三个零只保留一组", "threeSum([0,0,0])", [[0,0,0]])] }),
   q({ id: 167, title: "两数之和 II - 输入有序数组", slug: "two-sum-ii-input-array-is-sorted", topic: "双指针", difficulty: "中等",
     summary: "在一个按非递减顺序排列的数组中，找到和为目标值的两个数，并返回它们从 1 开始计算的位置。", example: "numbers = [2,7,11,15], target = 9 → [1,2]",
     method: "用左右指针夹逼：和偏小时左指针右移，和偏大时右指针左移。", params: ["numbers", "target"],
     hint: "数组已经有序；找到答案后要返回 [left + 1, right + 1]。", complexity: "时间 O(n)，空间 O(1)", functionName: "twoSum",
     tests: [t("首尾之间找到答案", "twoSum([2,7,11,15], 9)", [1,2]), t("答案跨过中间元素", "twoSum([2,3,4], 6)", [1,3]), t("包含负数", "twoSum([-1,0], -1)", [1,2])] }),
+  q({ id: 2824, title: "统计和小于目标的下标对数目", slug: "count-pairs-whose-sum-is-less-than-target", topic: "双指针", difficulty: "简单",
+    summary: "统计 i < j 且两数和严格小于 target 的下标对。", example: "nums = [-1,1,2,3,1], target = 2 → 3",
+    method: "排序后双指针；和小于 target 时一次计入 right - left 对。", params: ["nums", "target"],
+    hint: "最大配对满足时，更小的右端也都满足。", complexity: "时间 O(n log n)，空间 O(1)（不计排序）", functionName: "countPairs",
+    tests: [t("示例 1", "countPairs([-1,1,2,3,1], 2)", 3), t("负数", "countPairs([-6,2,5,-2,-7,-1,3], -2)", 10), t("严格小于", "countPairs([1,1,1], 2)", 0)] }),
+  q({ id: 16, title: "最接近的三数之和", slug: "3sum-closest", topic: "双指针", difficulty: "中等",
+    summary: "返回三个不同位置之和中最接近 target 的值。", example: "nums = [-1,2,1,-4], target = 1 → 2",
+    method: "排序并固定一数，再用双指针更新最近和。", params: ["nums", "target"],
+    hint: "和偏小移左指针，偏大移右指针。", complexity: "时间 O(n²)，空间 O(1)（不计排序）", functionName: "threeSumClosest",
+    tests: [t("示例 1", "threeSumClosest([-1,2,1,-4], 1)", 2), t("三个零", "threeSumClosest([0,0,0], 1)", 0), t("很小的目标", "threeSumClosest([1,1,1,0], -100)", 2)] }),
+  q({ id: 18, title: "四数之和", slug: "4sum", topic: "双指针", difficulty: "中等",
+    summary: "返回四个不同位置之和等于 target 的不重复组合。", example: "nums = [1,0,-1,0,-2,2], target = 0 → 3 组答案",
+    method: "排序并固定两数，再用双指针找另外两数并去重。", params: ["nums", "target"],
+    hint: "命中后，左右指针都要跳过重复值。", complexity: "时间 O(n³)，空间 O(1)（不计排序与结果）", functionName: "fourSum",
+    tests: [t("示例 1", "sorted([sorted(x) for x in fourSum([1,0,-1,0,-2,2], 0)])", [[-2,-1,1,2],[-2,0,0,2],[-1,0,0,1]]), t("去重", "fourSum([2,2,2,2,2], 8)", [[2,2,2,2]])] }),
+  q({ id: 611, title: "有效三角形的个数", slug: "valid-triangle-number", topic: "双指针", difficulty: "中等",
+    summary: "统计能组成非退化三角形的下标三元组。", example: "nums = [2,2,3,4] → 3",
+    method: "排序并固定最长边，再用双指针批量计数。", params: ["nums"],
+    hint: "两条短边之和必须严格大于最长边。", complexity: "时间 O(n²)，空间 O(1)（不计排序）", functionName: "triangleNumber",
+    tests: [t("示例 1", "triangleNumber([2,2,3,4])", 3), t("示例 2", "triangleNumber([4,2,3,4])", 4), t("严格大于", "triangleNumber([1,1,2])", 0)] }),
   q({ id: 42, title: "接雨水", slug: "trapping-rain-water", topic: "双指针", difficulty: "困难",
     summary: "根据柱子高度，计算下雨后能够接住的总水量。", example: "[0,1,0,2,1,0,1,3,2,1,2,1] → 6",
     method: "维护左右最高柱，较低一侧可以立即确定当前积水。", params: ["height"],
@@ -652,8 +672,8 @@ export const problems: Problem[] = [
     tests: [t("重复 2", "findDuplicate([1,3,4,2,2])", 2), t("重复 3", "findDuplicate([3,1,3,4,2])", 3)] }),
 ];
 
-if (problems.length !== 101) {
-  throw new Error(`Hot 100 加练题数据应为 101 题，当前为 ${problems.length} 题`);
+if (problems.length !== 105) {
+  throw new Error(`Hot 100 加练题数据应为 105 题，当前为 ${problems.length} 题`);
 }
 
 export const officialProblemUrl = (problem: Pick<Problem, "slug">): string =>

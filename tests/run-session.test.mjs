@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { problemDetailsA } from "../app/problem-details-a.ts";
+import { problemDetailsC } from "../app/problem-details-c.ts";
+import { problemEnglishA } from "../app/problem-i18n-a.ts";
+import { problemEnglishC } from "../app/problem-i18n-c.ts";
 import { problems } from "../app/problems.ts";
 import {
   beginnerPythonErrorHint,
@@ -15,10 +19,10 @@ import {
 } from "../app/run-session.ts";
 
 test("every practice problem carries the exact LeetCode entry contract", () => {
-  assert.equal(problems.length, 101);
+  assert.equal(problems.length, 105);
   const solutionProblems = problems.filter((problem) => problem.signature.kind === "solution");
   const designProblems = problems.filter((problem) => problem.signature.kind === "design");
-  assert.equal(solutionProblems.length, 97);
+  assert.equal(solutionProblems.length, 101);
   assert.deepEqual(designProblems.map((problem) => problem.id), [146, 208, 155, 295]);
 
   for (const problem of solutionProblems) {
@@ -42,6 +46,31 @@ test("every practice problem carries the exact LeetCode entry contract", () => {
       const params = ["self", ...method.params].join(", ");
       assert.match(problem.starterCode, new RegExp(`^ {4}def ${method.name}\\(${params}\\):`, "m"), problem.title);
     }
+  }
+});
+
+test("the imported two-pointer lesson is unique, localized, and runnable", () => {
+  const problemDetails = { ...problemDetailsA, ...problemDetailsC };
+  const problemEnglish = { ...problemEnglishA, ...problemEnglishC };
+  assert.equal(new Set(problems.map((problem) => problem.id)).size, problems.length);
+  assert.equal(new Set(problems.map((problem) => problem.slug)).size, problems.length);
+
+  const expected = new Map([
+    [15, ["3sum", "threeSum", ["nums"]]],
+    [167, ["two-sum-ii-input-array-is-sorted", "twoSum", ["numbers", "target"]]],
+    [2824, ["count-pairs-whose-sum-is-less-than-target", "countPairs", ["nums", "target"]]],
+    [16, ["3sum-closest", "threeSumClosest", ["nums", "target"]]],
+    [18, ["4sum", "fourSum", ["nums", "target"]]],
+    [611, ["valid-triangle-number", "triangleNumber", ["nums"]]],
+  ]);
+
+  for (const [id, [slug, methodName, params]] of expected) {
+    const matches = problems.filter((problem) => problem.id === id);
+    assert.equal(matches.length, 1, `problem ${id}`);
+    assert.equal(matches[0].slug, slug, `problem ${id}`);
+    assert.deepEqual(matches[0].signature.methods, [{ name: methodName, params }], `problem ${id}`);
+    assert.ok(problemDetails[id], `Chinese detail ${id}`);
+    assert.ok(problemEnglish[id], `English copy ${id}`);
   }
 });
 
