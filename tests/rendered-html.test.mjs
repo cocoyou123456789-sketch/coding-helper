@@ -139,6 +139,8 @@ test("ships Hot 100 plus five extra problems, course dictation, the Python runne
   assert.equal(manifest.icons.length, 3);
   assert.match(serviceWorkerSource, /2026-07-16-execution-trace-v2/);
   assert.match(workflowSource, /actions\/deploy-pages@v4/);
+  assert.match(workflowSource, /dist\/client\/python-worker-trace-v2\.js/);
+  assert.doesNotMatch(workflowSource, /python-worker-signature-v1\.js/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));
   await access(new URL("../public/icons/apple-touch-icon.png", import.meta.url));
