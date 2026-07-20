@@ -65,4 +65,11 @@ test("starter scaffolding and generated suggestions do not count as personal ref
     hasRecognitionSignal: false,
     notesReady: false,
   });
+
+  const automaticLayerNote = "【自动分层解释】第 3 层（函数 solve）：结束函数并返回结果。";
+  assert.equal(practiceCompletionProgress(
+    code,
+    ["", "", automaticLayerNote],
+    "I recognize it",
+  ).explainedKeyLines, 0);
 });

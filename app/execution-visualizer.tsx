@@ -10,6 +10,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  analyzePythonCodeLayers,
+  type CodeLayerLine,
+} from "./code-layer-analysis";
+import {
   executionVariableChanges,
   explainExecutionEvent,
   formatExecutionValue,
@@ -42,13 +46,17 @@ type ExecutionVisualizerProps = {
   signature: ProblemSignature;
   language: Language;
   preferredTestIndex: number;
+  activeCodeLine: number;
   disabled: boolean;
+  notesReadOnly: boolean;
   workerRef: RefObject<Worker | null>;
   runtimeReadyRef: RefObject<boolean>;
   timeoutRef: RefObject<ReturnType<typeof setTimeout> | null>;
   runSequenceRef: RefObject<number>;
   activeRunRef: ActiveRunRef;
   onOpenMistakeBook: () => void;
+  onApplyLineNotes: (notes: string[]) => number;
+  onRevealLine: (lineNumber: number) => void;
 };
 
 type Snapshot = {
@@ -60,17 +68,22 @@ type Snapshot = {
 };
 
 type Phase = "idle" | "validating" | "tracing" | "ready" | "error";
+type VisualizerView = "trace" | "layers";
 
 const PLAYBACK_SPEEDS = [0.5, 1, 1.5, 2] as const;
 
 function visualizerCopy(language: Language) {
   if (language === "en") {
     return {
-      trigger: "Animate each line",
-      mobileTrigger: "Steps",
-      triggerHint: "See what Python actually does",
+      trigger: "Code explainer",
+      mobileTrigger: "Explain",
+      triggerHint: "Understand layers or run each line",
       title: "Beginner line-by-line animation",
-      close: "Close animation",
+      layerTitle: "Beginner code-layer explainer",
+      close: "Close code explainer",
+      traceView: "Run step by step",
+      layerView: "Understand the structure",
+      viewLabel: "Choose explanation view",
       mine: "My code",
       savedMine: "Saved wrong version",
       savedMineNote: "This is the earlier answer saved in your mistake book. It may be right or wrong, so compare its steps with the reference.",
@@ -96,6 +109,25 @@ function visualizerCopy(language: Language) {
       validation: "Demo case",
       testsPassed: (passed: number, total: number) => `${passed} / ${total} quick tests passed`,
       sourceDisclaimer: "This is one real Python run for the selected example. It does not prove every possible input; your code and playback stay on this device.",
+      layerDisclaimer: "This explanation is generated locally from Python structure and indentation. It never runs or uploads the code, so use the real animation to confirm runtime behavior.",
+      localOnly: "Local analysis · no upload",
+      layerSummary: "Structure summary",
+      layerCount: (count: number) => `${count} layer${count === 1 ? "" : "s"}`,
+      blockCount: (count: number) => `${count} nested block${count === 1 ? "" : "s"}`,
+      lineCount: (count: number) => `${count} meaningful line${count === 1 ? "" : "s"}`,
+      allLayers: "All layers",
+      layerNumber: (depth: number) => `Layer ${depth}`,
+      layerMap: "Code map",
+      layerTree: "Outside-to-inside explanation",
+      codeLineLabel: (line: number, depth: number, code: string) => `Line ${line}, layer ${depth}: ${code || "blank line"}`,
+      selectedLayer: "What this line means",
+      inside: "Where it lives",
+      topLevel: "Top level",
+      locateLine: "Show this line in the editor",
+      fillEmptyNotes: "Fill empty line notes",
+      notesApplied: (count: number) => `Filled or refreshed ${count} automatic explanation${count === 1 ? "" : "s"}.`,
+      layerTruncated: "The file is very large, so only the first safe section is shown.",
+      noLayerLines: "No lines match this layer.",
       savedDisclaimer: "This reference was saved in your mistake book. It is not an official answer or the only solution.",
       siteDisclaimer: "This is a site demonstration, not an official LeetCode answer and not the only solution.",
       step: (current: number, total: number) => `Step ${current} of ${total}`,
@@ -108,6 +140,7 @@ function visualizerCopy(language: Language) {
       speed: "Playback speed",
       timeline: "Animation progress",
       currentAction: "What this step means",
+      runtimeLayer: "Code layer",
       variablesNow: "Variables before this line runs",
       noVariables: "No local variables are visible yet.",
       changesAfter: "What changes after this line",
@@ -132,11 +165,15 @@ function visualizerCopy(language: Language) {
   }
 
   return {
-    trigger: "逐行动画",
-    mobileTrigger: "演示",
-    triggerHint: "看看 Python 真正做了什么",
+    trigger: "代码讲解",
+    mobileTrigger: "讲解",
+    triggerHint: "分层看懂，也可以逐步运行",
     title: "小白逐行动画",
-    close: "关闭动画",
+    layerTitle: "小白代码分层解释器",
+    close: "关闭代码讲解",
+    traceView: "逐步运行",
+    layerView: "看懂结构",
+    viewLabel: "选择讲解方式",
     mine: "我的代码",
     savedMine: "错题本旧代码",
     savedMineNote: "这是错题本里保存的旧作答，可能正确也可能错误；可以和参考解法逐步对照。",
@@ -162,6 +199,25 @@ function visualizerCopy(language: Language) {
     validation: "演示用例",
     testsPassed: (passed: number, total: number) => `${passed} / ${total} 个快速测试通过`,
     sourceDisclaimer: "这是所选例子的一次真实 Python 执行，只能说明这个例子，不能代表所有输入；代码和动画数据只留在这台设备。",
+    layerDisclaimer: "分层解释只在本机读取 Python 的缩进和语句，不运行、也不上传代码；想确认代码实际走了哪一步，请切换到逐步运行。",
+    localOnly: "本机分析 · 不上传",
+    layerSummary: "结构概览",
+    layerCount: (count: number) => `共 ${count} 层`,
+    blockCount: (count: number) => `${count} 个嵌套代码块`,
+    lineCount: (count: number) => `${count} 行有效代码`,
+    allLayers: "全部层",
+    layerNumber: (depth: number) => `第 ${depth} 层`,
+    layerMap: "代码地图",
+    layerTree: "从外到内逐层解释",
+    codeLineLabel: (line: number, depth: number, code: string) => `第 ${line} 行，第 ${depth} 层：${code || "空行"}`,
+    selectedLayer: "这行到底在做什么",
+    inside: "它在哪一层",
+    topLevel: "最外层",
+    locateLine: "回编辑器定位这一行",
+    fillEmptyNotes: "填入空白逐行笔记",
+    notesApplied: (count: number) => `已填入或刷新 ${count} 条自动解释。`,
+    layerTruncated: "代码很长，为了保持流畅，目前只解释前面的安全范围。",
+    noLayerLines: "这一层暂时没有代码行。",
     savedDisclaimer: "这份参考来自你的错题本，不是官方答案，也不是唯一解法。",
     siteDisclaimer: "这是本站示范解法，不是 LeetCode 官方答案，也不是唯一解法。",
     step: (current: number, total: number) => `第 ${current} / ${total} 步`,
@@ -174,6 +230,7 @@ function visualizerCopy(language: Language) {
     speed: "播放速度",
     timeline: "动画进度",
     currentAction: "这一小步在做什么",
+    runtimeLayer: "它所在的代码层",
     variablesNow: "执行这一行之前的变量",
     noVariables: "现在还没有能看到的局部变量。",
     changesAfter: "执行这一行之后的变化",
@@ -243,6 +300,11 @@ function outcomeClassName(result: ExecutionTraceResult | null): string {
   return result.test.passed ? styles.outcomePassed : styles.outcomeFailed;
 }
 
+function safeSourceLine(code: string, lineNumber: number): number {
+  const lineCount = Math.max(1, code.replace(/\r\n?/g, "\n").split("\n").length);
+  return Math.min(Math.max(1, Number.isInteger(lineNumber) ? lineNumber : 1), lineCount);
+}
+
 export default function ExecutionVisualizer({
   problemId,
   problemTitle,
@@ -253,17 +315,22 @@ export default function ExecutionVisualizer({
   signature,
   language,
   preferredTestIndex,
+  activeCodeLine,
   disabled,
+  notesReadOnly,
   workerRef,
   runtimeReadyRef,
   timeoutRef,
   runSequenceRef,
   activeRunRef,
   onOpenMistakeBook,
+  onApplyLineNotes,
+  onRevealLine,
 }: ExecutionVisualizerProps) {
   const copy = useMemo(() => visualizerCopy(language), [language]);
   const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<VisualizerView>("layers");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [source, setSource] = useState<ExecutionTraceSource>("mine");
   const [testIndex, setTestIndex] = useState(0);
@@ -276,6 +343,9 @@ export default function ExecutionVisualizer({
   const [speed, setSpeed] = useState<(typeof PLAYBACK_SPEEDS)[number]>(1);
   const [errorMessage, setErrorMessage] = useState("");
   const [errorHint, setErrorHint] = useState("");
+  const [selectedLayerLine, setSelectedLayerLine] = useState(1);
+  const [layerFilter, setLayerFilter] = useState(0);
+  const [layerNoteStatus, setLayerNoteStatus] = useState("");
   const ownRunIdRef = useRef<string | null>(null);
   const activeLineRef = useRef<HTMLDivElement | null>(null);
   const codeScrollerRef = useRef<HTMLDivElement | null>(null);
@@ -329,16 +399,20 @@ export default function ExecutionVisualizer({
       referenceKind: demonstration ? "site" : saved ? "saved" : "none",
     });
     setSource("mine");
+    setSelectedLayerLine(safeSourceLine(code, activeCodeLine));
+    setLayerFilter(0);
+    setLayerNoteStatus("");
     setTestIndex(Number.isInteger(preferredTestIndex) && preferredTestIndex >= 0 && preferredTestIndex < tests.length
       ? preferredTestIndex
       : 0);
     resetPlayback();
     setPhase("idle");
-  }, [code, preferredTestIndex, problemId, resetPlayback, savedLearnerAnswer, savedReferenceAnswer, tests.length]);
+  }, [activeCodeLine, code, preferredTestIndex, problemId, resetPlayback, savedLearnerAnswer, savedReferenceAnswer, tests.length]);
 
   function openVisualizer() {
     if (disabled || activeRunRef.current) return;
     captureSnapshot();
+    setView("layers");
     setOpen(true);
   }
 
@@ -355,7 +429,7 @@ export default function ExecutionVisualizer({
   }, [language]);
 
   const generate = useCallback(() => {
-    if (!open || !snapshot || phase !== "idle") return;
+    if (!open || view !== "trace" || !snapshot || phase !== "idle") return;
     const selectedCode = sourceCode(snapshot, source);
     if (!selectedCode.trim() || tests.length === 0) return;
     if (activeRunRef.current) {
@@ -511,15 +585,16 @@ export default function ExecutionVisualizer({
     tests,
     timeoutRef,
     workerRef,
+    view,
   ]);
 
   useEffect(() => {
-    if (!open || phase !== "idle") return;
+    if (!open || view !== "trace" || phase !== "idle") return;
     const selectedCode = sourceCode(snapshot, source);
     if (!selectedCode.trim() || tests.length === 0) return;
     const generationTimer = window.setTimeout(generate, 0);
     return () => window.clearTimeout(generationTimer);
-  }, [generate, open, phase, snapshot, source, tests.length]);
+  }, [generate, open, phase, snapshot, source, tests.length, view]);
 
   useEffect(() => {
     if (!playing || phase !== "ready" || !trace) return undefined;
@@ -561,7 +636,21 @@ export default function ExecutionVisualizer({
 
   const selectedCode = sourceCode(snapshot, source);
   const lines = useMemo(() => selectedCode.replace(/\r\n?/g, "\n").split("\n"), [selectedCode]);
+  const layerAnalysis = useMemo(
+    () => analyzePythonCodeLayers(selectedCode, language),
+    [language, selectedCode],
+  );
+  const selectedLayer = layerAnalysis.lines.find((line) => line.lineNumber === selectedLayerLine)
+    ?? layerAnalysis.lines.find((line) => line.code)
+    ?? layerAnalysis.lines[0]
+    ?? null;
+  const visibleLayerLines = layerAnalysis.lines.filter(
+    (line) => line.code && (layerFilter === 0 || line.depth === layerFilter),
+  );
   const currentEvent = trace?.events[stepIndex] ?? null;
+  const currentStaticLayer = currentEvent
+    ? layerAnalysis.lines.find((line) => line.lineNumber === currentEvent.line) ?? null
+    : null;
   const changes = useMemo(
     () => trace && currentEvent ? executionVariableChanges(trace.events, stepIndex) : [],
     [currentEvent, stepIndex, trace],
@@ -581,9 +670,33 @@ export default function ExecutionVisualizer({
 
   function chooseSource(nextSource: ExecutionTraceSource) {
     if (generating || source === nextSource) return;
+    const nextCode = sourceCode(snapshot, nextSource);
     setSource(nextSource);
+    setSelectedLayerLine(safeSourceLine(nextCode, nextSource === "mine" ? activeCodeLine : 1));
+    setLayerFilter(0);
+    setLayerNoteStatus("");
     resetPlayback();
     setPhase("idle");
+  }
+
+  function chooseView(nextView: VisualizerView) {
+    if (view === nextView) return;
+    if (generating) {
+      if (nextView !== "layers") return;
+      cancelOwnRun();
+      resetPlayback();
+      setPhase("idle");
+    }
+    setPlaying(false);
+    setView(nextView);
+  }
+
+  function chooseLayerFilter(nextDepth: number) {
+    setLayerFilter(nextDepth);
+    const firstVisible = layerAnalysis.lines.find(
+      (line) => line.code && (nextDepth === 0 || line.depth === nextDepth),
+    );
+    if (firstVisible) setSelectedLayerLine(firstVisible.lineNumber);
   }
 
   function chooseTest(nextIndex: number) {
@@ -597,6 +710,17 @@ export default function ExecutionVisualizer({
     if (generating) return;
     resetPlayback();
     setPhase("idle");
+  }
+
+  function applyLayerNotes() {
+    if (source !== "mine" || notesReadOnly || codeChanged) return;
+    const filled = onApplyLineNotes(layerAnalysis.lines.map((line) => line.note));
+    setLayerNoteStatus(copy.notesApplied(filled));
+  }
+
+  function revealLayerLine(lineNumber: number) {
+    closeVisualizer();
+    window.requestAnimationFrame(() => onRevealLine(lineNumber));
   }
 
   function outcomeMessage(result: ExecutionTraceResult | null, testResult: ExecutionTraceTestResult | null): string {
@@ -639,7 +763,7 @@ export default function ExecutionVisualizer({
             <header className={styles.header}>
               <div className={styles.headingGroup}>
                 <span className={styles.eyebrow}>Python · {problemId}</span>
-                <h2 id="execution-visualizer-title">{copy.title}</h2>
+                <h2 id="execution-visualizer-title">{view === "layers" ? copy.layerTitle : copy.title}</h2>
                 <p>{problemTitle}</p>
               </div>
               <button type="button" className={styles.closeButton} onClick={closeVisualizer} aria-label={copy.close}>×</button>
@@ -652,7 +776,59 @@ export default function ExecutionVisualizer({
               </div>
             ) : null}
 
-            <div className={styles.toolbar}>
+            <div
+              className={styles.viewTabs}
+              role="tablist"
+              aria-label={copy.viewLabel}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                event.preventDefault();
+                const nextView = view === "layers" ? "trace" : "layers";
+                const tabList = event.currentTarget;
+                chooseView(nextView);
+                window.requestAnimationFrame(() => {
+                  const buttons = tabList.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                  buttons[nextView === "layers" ? 0 : 1]?.focus();
+                });
+              }}
+            >
+              <button
+                id="execution-layers-tab"
+                type="button"
+                role="tab"
+                tabIndex={view === "layers" ? 0 : -1}
+                aria-selected={view === "layers"}
+                aria-controls="execution-layers-panel"
+                className={view === "layers" ? styles.activeViewTab : ""}
+                onClick={() => chooseView("layers")}
+              >
+                <span aria-hidden="true">▤</span>
+                {copy.layerView}
+              </button>
+              <button
+                id="execution-trace-tab"
+                type="button"
+                role="tab"
+                tabIndex={view === "trace" ? 0 : -1}
+                aria-selected={view === "trace"}
+                aria-controls="execution-trace-panel"
+                className={view === "trace" ? styles.activeViewTab : ""}
+                disabled={generating}
+                onClick={() => chooseView("trace")}
+              >
+                <span aria-hidden="true">▶</span>
+                {copy.traceView}
+              </button>
+              {view === "layers" ? <small>{copy.localOnly}</small> : null}
+            </div>
+
+            <div
+              id={view === "layers" ? "execution-layers-panel" : "execution-trace-panel"}
+              className={styles.viewPanel}
+              role="tabpanel"
+              aria-labelledby={view === "layers" ? "execution-layers-tab" : "execution-trace-tab"}
+            >
+              <div className={styles.toolbar}>
               <div className={styles.sourceTabs} role="group" aria-label={language === "zh" ? "选择代码来源" : "Choose code source"}>
                 <button
                   type="button"
@@ -696,21 +872,23 @@ export default function ExecutionVisualizer({
                 ) : null}
               </div>
 
-              <label className={styles.testPicker}>
-                <span>{copy.testLabel}</span>
-                <select
-                  value={testIndex}
-                  disabled={generating || tests.length < 2}
-                  onChange={(event) => chooseTest(Number(event.target.value))}
-                >
-                  {tests.map((test, index) => (
-                    <option value={index} key={`${test.expression}:${index}`}>
-                      {index + 1}. {resultName(test, index, language)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+              {view === "trace" ? (
+                <label className={styles.testPicker}>
+                  <span>{copy.testLabel}</span>
+                  <select
+                    value={testIndex}
+                    disabled={generating || tests.length < 2}
+                    onChange={(event) => chooseTest(Number(event.target.value))}
+                  >
+                    {tests.map((test, index) => (
+                      <option value={index} key={`${test.expression}:${index}`}>
+                        {index + 1}. {resultName(test, index, language)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              </div>
 
             {source === "saved" ? (
               <div className={styles.referenceNote}>
@@ -724,7 +902,7 @@ export default function ExecutionVisualizer({
               </div>
             ) : null}
 
-            <p className={styles.disclaimer}>{copy.sourceDisclaimer}</p>
+            <p className={styles.disclaimer}>{view === "layers" ? copy.layerDisclaimer : copy.sourceDisclaimer}</p>
 
             {noReference ? (
               <section className={styles.emptyState}>
@@ -739,6 +917,141 @@ export default function ExecutionVisualizer({
                 <div aria-hidden="true">{"{ }"}</div>
                 <h3>{copy.noCode}</h3>
               </section>
+            ) : view === "layers" ? (
+              <div className={styles.layerShell}>
+                <section className={styles.layerSummary} aria-label={copy.layerSummary}>
+                  <div>
+                    <span>{copy.layerSummary}</span>
+                    <strong>{copy.layerCount(layerAnalysis.maxDepth)}</strong>
+                    <small>{copy.blockCount(layerAnalysis.blockCount)} · {copy.lineCount(layerAnalysis.meaningfulLines)}</small>
+                  </div>
+                  {source === "mine" ? (
+                    <button type="button" onClick={applyLayerNotes} disabled={notesReadOnly || codeChanged}>
+                      <span aria-hidden="true">＋</span>{copy.fillEmptyNotes}
+                    </button>
+                  ) : null}
+                  {layerNoteStatus ? <p role="status">{layerNoteStatus}</p> : null}
+                  {layerAnalysis.truncated ? <p role="status">{copy.layerTruncated}</p> : null}
+                </section>
+
+                <div className={styles.layerWorkspace}>
+                  <section className={styles.layerCodePanel} aria-label={copy.layerMap}>
+                    <div className={styles.panelTopline}>
+                      <div>
+                        <span className={styles.panelDot} aria-hidden="true" />
+                        <strong>{copy.layerMap} · {sourceLabel(source)}</strong>
+                      </div>
+                      {selectedLayer ? <span>{copy.line(selectedLayer.lineNumber)}</span> : null}
+                    </div>
+                    <ol className={styles.layerCodeList}>
+                      {layerAnalysis.lines.map((line) => {
+                        const active = selectedLayer?.lineNumber === line.lineNumber;
+                        return (
+                          <li key={line.lineNumber}>
+                            <button
+                              type="button"
+                              className={active ? styles.activeLayerCodeLine : ""}
+                              aria-current={active ? "location" : undefined}
+                              aria-label={copy.codeLineLabel(line.lineNumber, line.depth, line.code)}
+                              onClick={() => setSelectedLayerLine(line.lineNumber)}
+                            >
+                              <span className={styles.lineNumber} aria-hidden="true">{line.lineNumber}</span>
+                              <span className={styles.layerDepthBadge} aria-hidden="true">L{line.depth}</span>
+                              <code>{line.text || " "}</code>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </section>
+
+                  <aside className={styles.layerLearningPanel}>
+                    <div className={styles.layerFilters} role="group" aria-label={copy.layerTree}>
+                      <button
+                        type="button"
+                        aria-pressed={layerFilter === 0}
+                        className={layerFilter === 0 ? styles.activeLayerFilter : ""}
+                        onClick={() => chooseLayerFilter(0)}
+                      >
+                        {copy.allLayers}
+                      </button>
+                      {Array.from({ length: layerAnalysis.maxDepth }, (_, index) => index + 1).map((depth) => (
+                        <button
+                          type="button"
+                          key={depth}
+                          aria-pressed={layerFilter === depth}
+                          className={layerFilter === depth ? styles.activeLayerFilter : ""}
+                          onClick={() => chooseLayerFilter(depth)}
+                        >
+                          {copy.layerNumber(depth)}
+                        </button>
+                      ))}
+                    </div>
+
+                    {selectedLayer ? (
+                      <section className={styles.selectedLayerCard} aria-live="polite">
+                        <div className={styles.selectedLayerMeta}>
+                          <span>{copy.layerNumber(selectedLayer.depth)}</span>
+                          <b>{selectedLayer.kindLabel}</b>
+                          <small>{copy.line(selectedLayer.lineNumber)}</small>
+                        </div>
+                        <h3>{copy.selectedLayer}</h3>
+                        <code>{selectedLayer.code || " "}</code>
+                        <p>{selectedLayer.explanation}</p>
+                        <dl>
+                          <div>
+                            <dt>{copy.inside}</dt>
+                            <dd>
+                              {selectedLayer.path.length
+                                ? [...selectedLayer.path, selectedLayer.label].join(" → ")
+                                : `${copy.topLevel} → ${selectedLayer.label}`}
+                            </dd>
+                          </div>
+                        </dl>
+                        {source === "mine" ? (
+                          <button type="button" onClick={() => revealLayerLine(selectedLayer.lineNumber)}>
+                            {copy.locateLine}<span aria-hidden="true"> ↗</span>
+                          </button>
+                        ) : null}
+                      </section>
+                    ) : null}
+
+                    <section className={styles.layerTree} aria-label={copy.layerTree}>
+                      <div className={styles.layerTreeHeading}>
+                        <span>{copy.layerTree}</span>
+                        <strong>{layerFilter === 0 ? copy.allLayers : copy.layerNumber(layerFilter)}</strong>
+                      </div>
+                      {visibleLayerLines.length ? (
+                        <ol>
+                          {visibleLayerLines.map((line: CodeLayerLine) => {
+                            const active = selectedLayer?.lineNumber === line.lineNumber;
+                            return (
+                              <li
+                                key={line.lineNumber}
+                                style={{ marginInlineStart: `${Math.min(5, Math.max(0, line.depth - 1)) * 16}px` }}
+                              >
+                                <button
+                                  type="button"
+                                  className={active ? styles.activeLayerTreeLine : ""}
+                                  aria-current={active ? "location" : undefined}
+                                  onClick={() => setSelectedLayerLine(line.lineNumber)}
+                                >
+                                  <span>
+                                    <b>{copy.layerNumber(line.depth)} · {line.kindLabel}</b>
+                                    <small>{copy.line(line.lineNumber)}</small>
+                                  </span>
+                                  <code>{line.code}</code>
+                                  <p>{line.explanation}</p>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      ) : <p className={styles.muted}>{copy.noLayerLines}</p>}
+                    </section>
+                  </aside>
+                </div>
+              </div>
             ) : (
               <div className={styles.workspace}>
                 <section className={styles.codePanel} aria-label={language === "zh" ? "只读代码动画" : "Read-only code animation"}>
@@ -790,6 +1103,16 @@ export default function ExecutionVisualizer({
                         <span>{copy.step(stepIndex + 1, eventCount)} · {copy.line(currentEvent.line)}</span>
                         <h3>{copy.currentAction}</h3>
                         <p>{explainExecutionEvent(currentEvent, lines[currentEvent.line - 1] ?? "", language)}</p>
+                        {currentStaticLayer ? (
+                          <div className={styles.runtimeLayer}>
+                            <b>{copy.runtimeLayer} · {copy.layerNumber(currentStaticLayer.depth)}</b>
+                            <span>
+                              {currentStaticLayer.path.length
+                                ? [...currentStaticLayer.path, currentStaticLayer.label].join(" → ")
+                                : `${copy.topLevel} → ${currentStaticLayer.label}`}
+                            </span>
+                          </div>
+                        ) : null}
                       </section>
 
                       <section className={styles.dataCard}>
@@ -836,7 +1159,7 @@ export default function ExecutionVisualizer({
               </div>
             )}
 
-            {!noReference && selectedCode.trim() ? (
+            {view === "trace" && !noReference && selectedCode.trim() ? (
               <footer className={styles.footer}>
                 <div className={styles.validationSummary}>
                   <span>{copy.validation}</span>
@@ -936,6 +1259,7 @@ export default function ExecutionVisualizer({
                 ) : null}
               </footer>
             ) : null}
+            </div>
           </div>
         </div>
       ), document.body) : null}

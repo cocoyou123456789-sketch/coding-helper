@@ -19,7 +19,7 @@
     "test:editor": "node --experimental-strip-types --test tests/code-editor.test.mjs",
     "test:ide": "node --experimental-strip-types --test tests/practice-completion.test.mjs tests/practice-library.test.mjs tests/practice-ide.test.mjs",
     "test:navigation": "node --experimental-strip-types --test tests/navigation-state.test.mjs",
-    "test:runner": "node --experimental-strip-types --test tests/run-session.test.mjs tests/execution-trace.test.mjs tests/reference-solutions.test.mjs",
+    "test:runner": "node --experimental-strip-types --test tests/run-session.test.mjs tests/execution-trace.test.mjs tests/reference-solutions.test.mjs tests/code-layer-analysis.test.mjs",
     "test:storage": "node --experimental-strip-types --test tests/study-storage.test.mjs",
     "test:sw": "node --test tests/service-worker.test.mjs",
     "test:tabs": "node --experimental-strip-types --test tests/tab-navigation.test.mjs",

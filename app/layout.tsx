@@ -7,7 +7,7 @@ const isNativeApp = process.env.NEXT_PUBLIC_NATIVE_APP === "true";
 const webMetadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "题解簿｜LeetCode Hot 100 小白学习工作台",
-  description: "浅粉色算法学习手账：选难度、学题型、写代码、运行测试并记录逐行笔记。",
+  description: "浅粉色算法学习手账：自动解释代码层级、逐行动画、运行测试并记录错题笔记。",
   applicationName: "题解簿",
   manifest: `${siteUrl}/manifest.webmanifest`,
   formatDetection: {
@@ -28,25 +28,25 @@ const webMetadata: Metadata = {
   },
   openGraph: {
     title: "题解簿｜LeetCode Hot 100",
-    description: "像写学习手账一样掌握 LeetCode Hot 100：小课、完整练习、代码测试和逐行笔记。",
+    description: "从外到内看懂每层代码，再用真实逐行动画、测试和错题复盘掌握 LeetCode Hot 100。",
     type: "website",
     locale: "zh_CN",
     url: siteUrl,
     siteName: "题解簿",
     images: [
       {
-        url: `${siteUrl}/og.png`,
-        width: 1728,
-        height: 900,
-        alt: "题解簿 LeetCode Hot 100 学习工作台",
+        url: `${siteUrl}/og-code-layers.png`,
+        width: 1731,
+        height: 909,
+        alt: "题解簿代码分层解释与逐行动画学习工作台",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     title: "题解簿｜LeetCode Hot 100",
-    description: "选难度、学题型、写代码、做测试，再把思路记下来。",
-    images: [`${siteUrl}/og.png`],
+    description: "从外到内看懂代码层级，再逐行运行、做测试并复盘错题。",
+    images: [`${siteUrl}/og-code-layers.png`],
   },
 };
 

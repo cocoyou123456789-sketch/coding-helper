@@ -34,6 +34,7 @@ test("renders a non-editable hydration shell before local study data is restored
   assert.match(html, /apple-mobile-web-app-capable/);
   assert.match(html, /viewport-fit=cover/);
   assert.match(html, /theme-color/);
+  assert.match(html, /og-code-layers\.png/);
   assert.doesNotMatch(html, /_vinext_fonts/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
@@ -142,6 +143,7 @@ test("ships Hot 100 plus five extra problems, course dictation, the Python runne
   assert.match(workflowSource, /dist\/client\/python-worker-trace-v2\.js/);
   assert.doesNotMatch(workflowSource, /python-worker-signature-v1\.js/);
   await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/og-code-layers.png", import.meta.url));
   await access(new URL("../public/favicon.png", import.meta.url));
   await access(new URL("../public/icons/apple-touch-icon.png", import.meta.url));
   await access(new URL("../public/icons/icon-192.png", import.meta.url));

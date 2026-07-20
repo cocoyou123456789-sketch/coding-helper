@@ -150,11 +150,12 @@ test("the practice workspace uses a real Python editor and familiar IDE controls
   assert.match(styles, /\.testConsole \{[\s\S]*?scroll-margin-top: calc\(180px \+ env\(safe-area-inset-top\)\)/);
 });
 
-test("the beginner animation replays real Python for both learner and reference code", async () => {
-  const [page, visualizer, visualizerStyles, traceModel, references, worker] = await Promise.all([
+test("the beginner code explainer maps layers and replays real Python for learner and reference code", async () => {
+  const [page, visualizer, visualizerStyles, layerModel, traceModel, references, worker] = await Promise.all([
     readFile(file("app/page.tsx"), "utf8"),
     readFile(file("app/execution-visualizer.tsx"), "utf8"),
     readFile(file("app/execution-visualizer.module.css"), "utf8"),
+    readFile(file("app/code-layer-analysis.ts"), "utf8"),
     readFile(file("app/execution-trace.ts"), "utf8"),
     readFile(file("app/reference-solutions.ts"), "utf8"),
     readFile(file("public/python-worker-trace-v2.js"), "utf8"),
@@ -162,7 +163,17 @@ test("the beginner animation replays real Python for both learner and reference 
 
   assert.match(page, /lazy\(loadExecutionVisualizer\)/);
   assert.match(page, /savedReferenceAnswer=\{currentReferenceAnswer\}/);
+  assert.match(page, /onApplyLineNotes=\{applyAutomaticLayerNotes\}/);
+  assert.match(page, /onRevealLine=\{revealExplainedCodeLine\}/);
+  assert.match(page, /activeCodeLine=\{safeActiveCodeLine\}/);
   assert.match(page, /workerRef=\{workerRef\}/);
+  assert.match(visualizer, /代码讲解/);
+  assert.match(visualizer, /小白代码分层解释器/);
+  assert.match(visualizer, /看懂结构/);
+  assert.match(visualizer, /analyzePythonCodeLayers/);
+  assert.match(visualizer, /view !== "trace"/);
+  assert.match(visualizer, /填入空白逐行笔记/);
+  assert.match(visualizer, /已填入或刷新.*条自动解释/);
   assert.match(visualizer, /逐行动画/);
   assert.match(visualizer, /我的代码/);
   assert.match(visualizer, /一份参考解法/);
@@ -170,6 +181,15 @@ test("the beginner animation replays real Python for both learner and reference 
   assert.match(visualizer, /normalizeExecutionTraceResult/);
   assert.match(visualizer, /executionVariableChanges/);
   assert.match(visualizer, /role="dialog"/);
+  assert.match(visualizer, /activeCodeLine: number/);
+  assert.match(visualizer, /safeSourceLine\(code, activeCodeLine\)/);
+  assert.match(visualizer, /id="execution-layers-tab"/);
+  assert.match(visualizer, /aria-controls="execution-layers-panel"/);
+  assert.match(visualizer, /id=\{view === "layers" \? "execution-layers-panel" : "execution-trace-panel"\}/);
+  assert.match(visualizer, /role="tabpanel"/);
+  assert.match(visualizer, /aria-label=\{copy\.codeLineLabel/);
+  assert.match(visualizer, /cancelOwnRun\(\);[\s\S]*?setPhase\("idle"\)/);
+  assert.match(visualizer, /chooseLayerFilter\(depth\)/);
   assert.match(visualizer, /aria-current=\{active \? "step"/);
   assert.match(visualizer, /aria-live=\{playing \? "off" : "polite"\}/);
   assert.match(visualizer, /prefers-reduced-motion: reduce/);
@@ -177,9 +197,21 @@ test("the beginner animation replays real Python for both learner and reference 
   assert.match(visualizer, /不能据此判断正确或错误/);
   assert.doesNotMatch(visualizer, /官方正确答案|唯一标准答案/);
 
+  assert.match(layerModel, /pythonLanguage\.parser\.parse/);
+  assert.match(layerModel, /MAX_CODE_LAYER_CHARACTERS = 20_000/);
+  assert.match(layerModel, /automaticLayerNotePrefix/);
+  assert.doesNotMatch(layerModel, /\beval\s*\(/);
+  assert.doesNotMatch(layerModel, /\bfetch\s*\(/);
+
   assert.match(visualizerStyles, /min-height: 44px/);
   assert.match(visualizerStyles, /height: 100dvh/);
   assert.match(visualizerStyles, /env\(safe-area-inset-bottom\)/);
+  assert.match(visualizerStyles, /\.layerWorkspace/);
+  assert.match(visualizerStyles, /\.selectedLayerCard/);
+  assert.match(visualizerStyles, /\.viewPanel/);
+  assert.match(visualizerStyles, /safe-area-inset-left/);
+  assert.match(visualizerStyles, /safe-area-inset-right/);
+  assert.doesNotMatch(visualizerStyles, /\.layerTree li \{[\s\S]*?margin-inline-start: 0 !important/);
   assert.match(visualizerStyles, /@media \(prefers-reduced-motion: reduce\)/);
 
   assert.match(traceModel, /MAX_EXECUTION_TRACE_EVENTS = 240/);

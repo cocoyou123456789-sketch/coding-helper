@@ -1,3 +1,5 @@
+import { isAutomaticLayerNote } from "./code-layer-notes.js";
+
 export type PracticeCompletionProgress = {
   explainedKeyLines: number;
   requiredKeyLines: number;
@@ -35,7 +37,7 @@ export function practiceCompletionProgress(
     const suggestion = suggestedLineNotes[index];
     const suggestions = Array.isArray(suggestion) ? suggestion : [suggestion];
     const matchesSuggestion = suggestions.some((item) => item?.trim() === note);
-    return Boolean(note && !matchesSuggestion);
+    return Boolean(note && !matchesSuggestion && !isAutomaticLayerNote(note));
   }).length;
   const hasRecognitionSignal = Boolean(recognitionSignal.trim());
 

@@ -3,6 +3,12 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import backupStyles from "./backup-settings.module.css";
 import {
+  fillEmptyLayerNotes,
+  invalidateChangedAutomaticLayerNotes,
+  isAutomaticLayerNote,
+  stripAutomaticLayerNotePrefix,
+} from "./code-layer-notes.js";
+import {
   syncLineNotes,
   type LineNoteEdit,
 } from "./code-editor";
@@ -1031,7 +1037,10 @@ export default function Home() {
   const generatedLineNoteAlternatives = codeLines.map((line) => [explainLine(line, "zh"), explainLine(line, "en")]);
   const explainedLines = codeLines.filter((line, index) => {
     const note = currentRecord.lineNotes[index]?.trim();
-    return line.trim() && note && !generatedLineNoteAlternatives[index]?.some((suggestion) => suggestion.trim() === note);
+    return line.trim()
+      && note
+      && !isAutomaticLayerNote(note)
+      && !generatedLineNoteAlternatives[index]?.some((suggestion) => suggestion.trim() === note);
   }).length;
   const allQuickTestsPassed = runState.phase === "done"
     && runState.results.length > 0
@@ -2216,7 +2225,10 @@ export default function Home() {
 
   function updateLineNote(index: number, value: string) {
     const next = [...currentRecord.lineNotes];
-    next[index] = value;
+    const previous = next[index] ?? "";
+    next[index] = isAutomaticLayerNote(previous) && value !== previous
+      ? stripAutomaticLayerNotePrefix(value)
+      : value;
     updateRecord({
       lineNotes: next,
       status: practiceStatusAfterActivity(currentRecord.status, "edit"),
@@ -2322,6 +2334,33 @@ export default function Home() {
     });
   }
 
+  function applyAutomaticLayerNotes(notes: string[]): number {
+    if (studyEditingBlocked) return 0;
+    const { filled, lineNotes } = fillEmptyLayerNotes(
+      currentRecord.code,
+      currentRecord.lineNotes,
+      notes,
+    );
+    if (filled > 0) {
+      updateRecord({
+        lineNotes,
+        status: practiceStatusAfterActivity(currentRecord.status, "edit"),
+      });
+    }
+    return filled;
+  }
+
+  function revealExplainedCodeLine(lineNumber: number) {
+    const nextLine = Math.min(Math.max(1, lineNumber), codeLines.length);
+    setActiveCodeLine(nextLine);
+    setShowProblemList(false);
+    setShowNotesDrawer(false);
+    setMobileWorkspaceTab("code");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      codeEditorRef.current?.revealLine(nextLine);
+    }));
+  }
+
   function focusLineReflection() {
     setNoteTab("line");
     setNoteLineMode("all");
@@ -2397,7 +2436,11 @@ export default function Home() {
   }
 
   function updateEditorCode(nextCode: string, lineNoteEdit?: LineNoteEdit) {
-    const nextLineNotes = syncLineNotes(currentRecord.code, nextCode, currentRecord.lineNotes, lineNoteEdit);
+    const nextLineNotes = invalidateChangedAutomaticLayerNotes(
+      currentRecord.code,
+      nextCode,
+      syncLineNotes(currentRecord.code, nextCode, currentRecord.lineNotes, lineNoteEdit),
+    );
     if (nextCode === currentRecord.code && JSON.stringify(nextLineNotes) === JSON.stringify(currentRecord.lineNotes)) return;
     cancelActiveRun();
     markStudyDirty();
@@ -2412,7 +2455,11 @@ export default function Home() {
         [currentProblem.id]: {
           ...previousRecord,
           code: nextCode,
-          lineNotes: syncLineNotes(previousRecord.code, nextCode, previousRecord.lineNotes, lineNoteEdit),
+          lineNotes: invalidateChangedAutomaticLayerNotes(
+            previousRecord.code,
+            nextCode,
+            syncLineNotes(previousRecord.code, nextCode, previousRecord.lineNotes, lineNoteEdit),
+          ),
           status: practiceStatusAfterActivity(previousRecord.status, "edit"),
         },
       };
@@ -3078,13 +3125,17 @@ export default function Home() {
                   signature={currentProblem.signature}
                   language={language}
                   preferredTestIndex={firstFailedResult?.index ?? 0}
+                  activeCodeLine={safeActiveCodeLine}
                   disabled={runState.phase === "running"}
+                  notesReadOnly={studyEditingBlocked}
                   workerRef={workerRef}
                   runtimeReadyRef={runtimeReadyRef}
                   timeoutRef={timeoutRef}
                   runSequenceRef={runSequenceRef}
                   activeRunRef={activeRunRef}
                   onOpenMistakeBook={openMistakeBook}
+                  onApplyLineNotes={applyAutomaticLayerNotes}
+                  onRevealLine={revealExplainedCodeLine}
                 />
               </Suspense>
               <button className="run-button" type="button" onClick={() => runTests()} disabled={runState.phase === "running"}>
